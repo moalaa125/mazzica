@@ -100,11 +100,29 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
-      backgroundColor: _bg,
+      // خلفية متدرجة حقيقية بدل لون فلات — عشان الشيدر يكون عنده حاجة "ينكسر" فيها
+      background: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF0E0F12),
+              Color(0xFF1A1B20),
+              Color(0xFF14171C),
+            ],
+          ),
+        ),
+      ),
+      backgroundColor: _bg, // fallback + لون الـ scroll edge fade
       body: IndexedStack(index: _tab, children: pages),
       bottomBar: GlassTabBar.bottom(
         selectedIndex: _tab,
         onTabSelected: (i) => setState(() => _tab = i),
+        quality: GlassQuality.premium, // الشيدر الكامل + chromatic aberration (Impeller بس)
+        settings: const LiquidGlassSettings(
+          specularSharpness: GlassSpecularSharpness.sharp, // لمعان أقوى وأوضح زي الميه
+        ),
         tabs: const [
           GlassTab(icon: Icon(Icons.home_outlined), label: 'Home'),
           GlassTab(icon: Icon(Icons.music_note_outlined), label: 'Music'),
