@@ -133,9 +133,10 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icon(
             playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
             color: AppColors.lime,
+            size: 32.sp,
           ),
           shape: GlassIconButtonShape.circle,
-          size: 60,
+          size: 100.w,
           onPressed: () {
             if (playing) {
               player.pause();
@@ -150,9 +151,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNextButton() {
     return GlassIconButton(
-      icon: Icon(CupertinoIcons.forward_fill, color: AppColors.lime),
+      icon: Icon(
+        CupertinoIcons.forward_fill,
+        color: AppColors.lime,
+        size: 24.sp,
+      ),
       shape: GlassIconButtonShape.circle,
-      size: 60,
+      size: 60.w,
       onPressed: () {
         final newPosition = player.position + const Duration(seconds: 10);
         player.seek(
@@ -164,13 +169,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBackButton() {
     return GlassIconButton(
-      icon: Icon(CupertinoIcons.backward_fill, color: AppColors.lime),
+      icon: Icon(
+        CupertinoIcons.backward_fill,
+        color: AppColors.lime,
+        size: 24.sp,
+      ),
       shape: GlassIconButtonShape.circle,
-      size: 60,
+      size: 60.w,
       onPressed: () {
         final newPosition = player.position - const Duration(seconds: 10);
         player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
       },
+    );
+  }
+
+  Widget _buildEffectButton() {
+    return GlassIconButton(
+      icon: Icon(CupertinoIcons.rays, color: AppColors.lime, size: 24.sp),
+      shape: GlassIconButtonShape.circle,
+      size: 60.w,
+      onPressed: () {},
+    );
+  }
+
+  Widget _buildFolderutton() {
+    return GlassIconButton(
+      icon: Icon(
+        CupertinoIcons.music_note_list,
+        color: AppColors.lime,
+        size: 24.sp,
+      ),
+      shape: GlassIconButtonShape.circle,
+      size: 60.w,
+      onPressed: () {},
     );
   }
 
@@ -209,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               SizedBox(height: 20.h),
               _buildSeekBar(),
-              SizedBox(height: 12.h),
+              SizedBox(height: 20.h),
               Center(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -218,6 +249,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     _buildPlayPauseButton(),
                     _buildNextButton(),
                   ],
+                ),
+              ),
+              SizedBox(height: 20.h),
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [_buildFolderutton(), _buildEffectButton()],
                 ),
               ),
             ],
@@ -230,10 +268,19 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIconColor: AppColors.lime,
         indicatorColor: AppColors.lime.withValues(alpha: 0.18),
         onTabSelected: (i) => setState(() => _tab = i),
-        tabs: const [
-          GlassTab(icon: Icon(CupertinoIcons.compass), label: 'Explore'),
-          GlassTab(icon: Icon(CupertinoIcons.music_note), label: 'Music'),
-          GlassTab(icon: Icon(CupertinoIcons.folder), label: 'Files'),
+        tabs: [
+          GlassTab(
+            icon: Icon(CupertinoIcons.compass, size: 24.sp),
+            label: 'Explore',
+          ),
+          GlassTab(
+            icon: Icon(CupertinoIcons.music_note_2, size: 24.sp),
+            label: 'Music',
+          ),
+          GlassTab(
+            icon: Icon(CupertinoIcons.folder, size: 24.sp),
+            label: 'Files',
+          ),
         ],
         selectedIndex: _tab,
       ),
