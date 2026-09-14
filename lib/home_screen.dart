@@ -25,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
       background: Container(color: AppColors.bg),
       backgroundColor: AppColors.bg,
       bottomBar: GlassTabBar.bottom(
-        selectedIconColor: AppColors.red,
+        selectedIconColor: AppColors.lime,
         indicatorColor: AppColors.lime.withValues(alpha: 0.18),
         onTabSelected: (i) => setState(() => _tab = i),
 
