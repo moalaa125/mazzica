@@ -42,7 +42,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return '$minutes:$seconds';
   }
 
-  // شريط التقدم بالزجاج
   Widget _buildSeekBar() {
     return StreamBuilder<Duration?>(
       stream: player.durationStream,
@@ -105,7 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // زرار تشغيل/إيقاف بالزجاج
   Widget _buildPlayPauseButton() {
     return StreamBuilder<PlayerState>(
       stream: player.playerStateStream,
@@ -129,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
             color: AppColors.lime,
           ),
           shape: GlassIconButtonShape.circle,
+          size: 60,
           onPressed: () {
             if (playing) {
               player.pause();
@@ -137,6 +136,32 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           },
         );
+      },
+    );
+  }
+
+  Widget _buildNextButton() {
+    return GlassIconButton(
+      icon: Icon(CupertinoIcons.forward_fill, color: AppColors.lime),
+      shape: GlassIconButtonShape.circle,
+      size: 60,
+      onPressed: () {
+        final newPosition = player.position + const Duration(seconds: 10);
+        player.seek(
+          newPosition > player.duration! ? player.duration : newPosition,
+        );
+      },
+    );
+  }
+
+  Widget _buildBackButton() {
+    return GlassIconButton(
+      icon: Icon(CupertinoIcons.backward_fill, color: AppColors.lime),
+      shape: GlassIconButtonShape.circle,
+      size: 60,
+      onPressed: () {
+        final newPosition = player.position - const Duration(seconds: 10);
+        player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
       },
     );
   }
@@ -152,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return GlassScaffold(
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.only(left: 8.w, right: 8.w),
+          padding: EdgeInsets.only(left: 15.w, right: 15.w),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -177,7 +202,16 @@ class _HomeScreenState extends State<HomeScreen> {
               SizedBox(height: 20.h),
               _buildSeekBar(),
               SizedBox(height: 12.h),
-              Center(child: _buildPlayPauseButton()),
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildBackButton(),
+                    _buildPlayPauseButton(),
+                    _buildNextButton(),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
