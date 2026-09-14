@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
 import 'package:mazzica/home_screen.dart';
@@ -38,12 +39,20 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Mazzica',
-      builder: (context, child) =>
-          Material(type: MaterialType.transparency, child: child!),
-      theme: ThemeData.dark(),
-      home: const HomeScreen(),
+    return ScreenUtilInit(
+      designSize: const Size(412, 915), 
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (context, child) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Mazzica',
+          builder: (context, child) =>
+              Material(type: MaterialType.transparency, child: child!),
+          theme: ThemeData.dark(),
+          home: const HomeScreen(),
+        );
+      },
     );
   }
 }
