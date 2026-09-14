@@ -66,13 +66,14 @@ class _HomeScreenState extends State<HomeScreen> {
             return Column(
               children: [
                 GlassSlider(
+                  onChangeEnd: (value) {
+                    player.seek(Duration(milliseconds: value.toInt()));
+                  },
                   min: 0,
                   max: maxMs,
                   value: valueMs,
                   activeColor: AppColors.lime,
-                  onChanged: (value) {
-                    player.seek(Duration(milliseconds: value.toInt()));
-                  },
+                  onChanged: (value) {},
                 ),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16.w),
