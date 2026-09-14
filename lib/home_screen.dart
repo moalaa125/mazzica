@@ -15,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 1;
   final player = AudioPlayer();
+  double? _dragValue;
 
   late final List<Widget> pages = [
     _buildPage('Explore', CupertinoIcons.compass),
@@ -58,22 +59,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 .toDouble()
                 .clamp(1.0, double.infinity)
                 .toDouble();
-            final valueMs = position.inMilliseconds
-                .toDouble()
-                .clamp(0.0, maxMs)
-                .toDouble();
+            final valueMs =
+                _dragValue ??
+                position.inMilliseconds.toDouble().clamp(0.0, maxMs).toDouble();
 
             return Column(
               children: [
                 GlassSlider(
                   onChangeEnd: (value) {
                     player.seek(Duration(milliseconds: value.toInt()));
+                    setState(() {
+                      _dragValue = null;
+                    });
                   },
                   min: 0,
                   max: maxMs,
                   value: valueMs,
                   activeColor: AppColors.lime,
-                  onChanged: (value) {},
+                  onChanged: (value) {
+                    setState(() {
+                      _dragValue = value;
+                    });
+                  },
                 ),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16.w),
