@@ -12,10 +12,13 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   int _tab = 1;
   final player = AudioPlayer();
   double? _dragValue;
+  late final AnimationController _glowController;
+  late final Animation<double> _glowAnimation;
 
   late final List<Widget> pages = [
     _buildPage('Explore', CupertinoIcons.compass),
@@ -27,6 +30,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadAudio();
+
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _glowAnimation = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    );
   }
 
   Future<void> _loadAudio() async {
@@ -61,7 +73,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 .toDouble();
             final valueMs =
                 _dragValue ??
-                position.inMilliseconds.toDouble().clamp(0.0, maxMs).toDouble();
+                position.inMilliseconds
+                    .toDouble()
+                    .clamp(0.0, maxMs)
+                    .toDouble();
 
             return Column(
               children: [
@@ -178,7 +193,9 @@ class _HomeScreenState extends State<HomeScreen> {
       size: 40.w,
       onPressed: () {
         final newPosition = player.position - const Duration(seconds: 10);
-        player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
+        player.seek(
+          newPosition < Duration.zero ? Duration.zero : newPosition,
+        );
       },
     );
   }
@@ -230,9 +247,47 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // كونتينر صورة الأغنية بتوهج نابض (in/out)
+  Widget _buildGlowingCover() {
+    return AnimatedBuilder(
+      animation: _glowAnimation,
+      builder: (context, child) {
+        final strength = _glowAnimation.value;
+
+        return Container(
+          height: 350.h,
+          width: 400.w,
+          decoration: BoxDecoration(
+            color: AppColors.lime,
+            borderRadius: BorderRadius.circular(20.r),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.lime.withValues(alpha: strength),
+                blurRadius: 15 + (strength * 20),
+                spreadRadius: -5,
+              ),
+              BoxShadow(
+                color: AppColors.lime.withValues(alpha: strength * 0.6),
+                blurRadius: 40 + (strength * 30),
+              ),
+              BoxShadow(
+                color: AppColors.lime.withValues(alpha: strength * 0.25),
+                blurRadius: 70 + (strength * 40),
+                spreadRadius: 10,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: Image.asset('assets/images/Music.png', scale: 1),
+    );
+  }
+
   @override
   void dispose() {
     player.dispose();
+    _glowController.dispose();
     super.dispose();
   }
 
@@ -256,35 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   SizedBox(height: 50.h),
-                  Container(
-                    height: 350.h,
-                    width: 400.w,
-                    decoration: BoxDecoration(
-                      color: AppColors.lime,
-                      borderRadius: BorderRadius.circular(20.r),
-                      boxShadow: [
-                        // طبقة قريبة، توهج حاد وواضح حوالين الحواف مباشرة
-                        BoxShadow(
-                          color: AppColors.lime.withValues(alpha: 0.6),
-                          blurRadius: 20,
-                          spreadRadius: -5,
-                        ),
-                        // طبقة متوسطة، بتوسع الإحساس بالضوء أكتر
-                        BoxShadow(
-                          color: AppColors.lime.withValues(alpha: 0.35),
-                          blurRadius: 50,
-                          spreadRadius: 0,
-                        ),
-                        // طبقة بعيدة جدًا وناعمة، بتدّي إحساس "الضوء بيضيء المكان حواليه"
-                        BoxShadow(
-                          color: AppColors.lime.withValues(alpha: 0.15),
-                          blurRadius: 90,
-                          spreadRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: Image.asset('assets/images/Music.png', scale: 1),
-                  ),
+                  _buildGlowingCover(),
                   SizedBox(height: 90.h),
                 ],
               ),
