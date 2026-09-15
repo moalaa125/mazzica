@@ -136,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
             size: 32.sp,
           ),
           shape: GlassIconButtonShape.circle,
-          size: 100.w,
+          size: 80.w,
           onPressed: () {
             if (playing) {
               player.pause();
@@ -149,15 +149,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildNextButton() {
+  Widget _buildNextEndButton() {
     return GlassIconButton(
       icon: Icon(
-        CupertinoIcons.forward_fill,
+        CupertinoIcons.forward_end,
         color: AppColors.lime,
         size: 24.sp,
       ),
       shape: GlassIconButtonShape.circle,
-      size: 60.w,
+      size: 40.w,
       onPressed: () {
         final newPosition = player.position + const Duration(seconds: 10);
         player.seek(
@@ -167,15 +167,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBackButton() {
+  Widget _buildBackEndButton() {
     return GlassIconButton(
       icon: Icon(
-        CupertinoIcons.backward_fill,
+        CupertinoIcons.backward_end,
         color: AppColors.lime,
         size: 24.sp,
       ),
       shape: GlassIconButtonShape.circle,
-      size: 60.w,
+      size: 40.w,
       onPressed: () {
         final newPosition = player.position - const Duration(seconds: 10);
         player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
@@ -185,9 +185,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildEffectButton() {
     return GlassIconButton(
-      icon: Icon(CupertinoIcons.rays, color: AppColors.lime, size: 24.sp),
+      icon: Icon(
+        CupertinoIcons.slider_horizontal_3,
+        color: AppColors.lime,
+        size: 24.sp,
+      ),
       shape: GlassIconButtonShape.circle,
-      size: 60.w,
+      size: 50.w,
       onPressed: () {},
     );
   }
@@ -200,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
         size: 24.sp,
       ),
       shape: GlassIconButtonShape.circle,
-      size: 60.w,
+      size: 50.w,
       onPressed: () {},
     );
   }
@@ -215,51 +219,97 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return GlassScaffold(
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.only(left: 15.w, right: 15.w),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Mazzica',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 30.sp,
-                  fontWeight: FontWeight.bold,
-                ),
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.only(left: 15.w, right: 15.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mazzica',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 30.sp,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 50.h),
+                  Container(
+                    height: 350.h,
+                    width: 400.w,
+                    decoration: BoxDecoration(
+                      color: AppColors.lime,
+                      borderRadius: BorderRadius.circular(20.r),
+                    ),
+                    child: Image.asset('assets/images/Music.png', scale: 1),
+                  ),
+                  SizedBox(height: 50),
+                  Container(
+                    height: 40,
+                    width: 400,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Text(
+                          'Afroto',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 20,
+                          ),
+                        ),
+                        Text(
+                          'Kaptin-Black',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 20,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SizedBox(height: 40.h),
+                ],
               ),
-              SizedBox(height: 30.h),
-              Container(
-                height: 350.h,
-                width: 400.w,
+            ),
+            Expanded(
+              child: Container(
+                width: double.infinity,
                 decoration: BoxDecoration(
-                  color: AppColors.lime,
-                  borderRadius: BorderRadius.circular(20.r),
+                  color: AppColors.surface,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
                 ),
-                child: Image.asset('assets/images/Music.png', scale: 1),
-              ),
-              SizedBox(height: 20.h),
-              _buildSeekBar(),
-              SizedBox(height: 20.h),
-              Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                child: Column(
                   children: [
-                    _buildBackButton(),
-                    _buildPlayPauseButton(),
-                    _buildNextButton(),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 10, right: 10),
+                      child: _buildSeekBar(),
+                    ),
+                    Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildFolderutton(),
+                          _buildBackEndButton(),
+                          _buildPlayPauseButton(),
+                          _buildNextEndButton(),
+                          _buildEffectButton(),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
-              SizedBox(height: 20.h),
-              Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [_buildFolderutton(), _buildEffectButton()],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
       background: Container(color: AppColors.bg),
