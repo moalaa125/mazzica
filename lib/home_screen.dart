@@ -61,7 +61,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 .toDouble();
             final valueMs =
                 _dragValue ??
-                position.inMilliseconds.toDouble().clamp(0.0, maxMs).toDouble();
+                position.inMilliseconds
+                    .toDouble()
+                    .clamp(0.0, maxMs)
+                    .toDouble();
 
             return Column(
               children: [
@@ -178,7 +181,9 @@ class _HomeScreenState extends State<HomeScreen> {
       size: 40.w,
       onPressed: () {
         final newPosition = player.position - const Duration(seconds: 10);
-        player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
+        player.seek(
+          newPosition < Duration.zero ? Duration.zero : newPosition,
+        );
       },
     );
   }
@@ -206,6 +211,27 @@ class _HomeScreenState extends State<HomeScreen> {
       shape: GlassIconButtonShape.circle,
       size: 50.w,
       onPressed: () {},
+    );
+  }
+
+  Widget _buildTrackInfo() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Afroto',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18.sp,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 2.h),
+        Text(
+          'Kaptin-Black',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13.sp),
+        ),
+      ],
     );
   }
 
@@ -244,36 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Image.asset('assets/images/Music.png', scale: 1),
                   ),
-                  SizedBox(height: 50),
-                  Container(
-                    height: 40,
-                    width: 400,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Text(
-                          'Afroto',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 20,
-                          ),
-                        ),
-                        Text(
-                          'Kaptin-Black',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 20,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  SizedBox(height: 40.h),
+                  SizedBox(height: 90.h),
                 ],
               ),
             ),
@@ -288,9 +285,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.only(left: 10, right: 10),
+                      padding: EdgeInsets.only(left: 10.w, top: 5.h),
+                      child: _buildTrackInfo(),
+                    ),
+                    SizedBox(height: 8.h),
+                    Padding(
+                      padding: EdgeInsets.only(left: 10.w, right: 10.w),
                       child: _buildSeekBar(),
                     ),
                     Center(
@@ -312,7 +315,16 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      background: Container(color: AppColors.bg),
+      background: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.bg, AppColors.surface],
+            stops: [0.6, 1.0],
+          ),
+        ),
+      ),
       backgroundColor: AppColors.bg,
       bottomBar: GlassTabBar.bottom(
         selectedIconColor: AppColors.lime,
