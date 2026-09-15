@@ -61,10 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 .toDouble();
             final valueMs =
                 _dragValue ??
-                position.inMilliseconds
-                    .toDouble()
-                    .clamp(0.0, maxMs)
-                    .toDouble();
+                position.inMilliseconds.toDouble().clamp(0.0, maxMs).toDouble();
 
             return Column(
               children: [
@@ -181,9 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
       size: 40.w,
       onPressed: () {
         final newPosition = player.position - const Duration(seconds: 10);
-        player.seek(
-          newPosition < Duration.zero ? Duration.zero : newPosition,
-        );
+        player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
       },
     );
   }
@@ -267,6 +262,26 @@ class _HomeScreenState extends State<HomeScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.lime,
                       borderRadius: BorderRadius.circular(20.r),
+                      boxShadow: [
+                        // طبقة قريبة، توهج حاد وواضح حوالين الحواف مباشرة
+                        BoxShadow(
+                          color: AppColors.lime.withValues(alpha: 0.6),
+                          blurRadius: 20,
+                          spreadRadius: -5,
+                        ),
+                        // طبقة متوسطة، بتوسع الإحساس بالضوء أكتر
+                        BoxShadow(
+                          color: AppColors.lime.withValues(alpha: 0.35),
+                          blurRadius: 50,
+                          spreadRadius: 0,
+                        ),
+                        // طبقة بعيدة جدًا وناعمة، بتدّي إحساس "الضوء بيضيء المكان حواليه"
+                        BoxShadow(
+                          color: AppColors.lime.withValues(alpha: 0.15),
+                          blurRadius: 90,
+                          spreadRadius: 10,
+                        ),
+                      ],
                     ),
                     child: Image.asset('assets/images/Music.png', scale: 1),
                   ),
