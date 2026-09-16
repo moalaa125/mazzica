@@ -247,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // كونتينر صورة الأغنية بتوهج نابض (in/out)
+  // كونتينر صورة الأغنية بتوهج بنفسجي نابض (لون متمم للصندوق الليموني)
   Widget _buildGlowingCover() {
     return AnimatedBuilder(
       animation: _glowAnimation,
@@ -262,16 +262,16 @@ class _HomeScreenState extends State<HomeScreen>
             borderRadius: BorderRadius.circular(20.r),
             boxShadow: [
               BoxShadow(
-                color: AppColors.lime.withValues(alpha: strength),
+                color: AppColors.violet.withValues(alpha: strength),
                 blurRadius: 15 + (strength * 20),
                 spreadRadius: -5,
               ),
               BoxShadow(
-                color: AppColors.lime.withValues(alpha: strength * 0.6),
+                color: AppColors.violet.withValues(alpha: strength * 0.6),
                 blurRadius: 40 + (strength * 30),
               ),
               BoxShadow(
-                color: AppColors.lime.withValues(alpha: strength * 0.25),
+                color: AppColors.violet.withValues(alpha: strength * 0.25),
                 blurRadius: 70 + (strength * 40),
                 spreadRadius: 10,
               ),
