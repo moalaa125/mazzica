@@ -10,6 +10,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shimmer/shimmer.dart';
 import 'dart:ui';
+import 'package:flutter_arc_text/flutter_arc_text.dart';
+import 'dart:math' as math;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -186,14 +188,45 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildTrackInfo() {
     return Column(
       children: [
-        Text('Kaptin-Black', style: GoogleFonts.rammettoOne(fontSize: 40)),
-        SizedBox(height: 2.h),
+        // 1. النص المقوس (قمنا بتغليفه للسيطرة على مساحته)
+        SizedBox(
+          height: 55
+              .h, // 🔥 السر هنا: ارتفاع صغير جداً حتى لا تدفع الدائرة الوهمية باقي الأزرار
+          width: double.infinity,
+          child: Stack(
+            alignment: Alignment.topCenter,
+            clipBehavior: Clip.none, // لضمان ظهور النص بحرية
+            children: [
+              Positioned(
+                top: 250, // نثبت النص في الأعلى تماماً
+                child: ArcText(
+                  radius:
+                      200.0, // كبرنا نصف القطر ليكون التقويس هادئاً وجميلاً كالصورة المرجعية
+                  text: 'KAPTIN-BLACK',
+                  textStyle: GoogleFonts.anton(
+                    fontSize: 40.sp,
+                    color: AppColors.textPrimary,
+                    letterSpacing: 2.0,
+                  ),
+                  // 🔥 تصحيح الزاوية لتكون في الأعلى تماماً
+                  startAngle: 0,
+                  startAngleAlignment: StartAngleAlignment.center,
+                  placement: Placement.outside,
+                  direction: Direction.clockwise,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        SizedBox(height: 5.h), // مسافة صغيرة جداً بين الأغنية واسم المطرب
+        // 2. اسم الفنان
         Shimmer.fromColors(
           baseColor: AppColors.textSecondary,
           highlightColor: AppColors.textPrimary,
           child: Text(
             'AFROTO',
-            style: GoogleFonts.abel(fontSize: 20, letterSpacing: 2),
+            style: GoogleFonts.abel(fontSize: 20.sp, letterSpacing: 4),
           ),
         ),
       ],
