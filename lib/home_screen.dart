@@ -11,7 +11,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shimmer/shimmer.dart';
 import 'dart:ui';
 
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -26,8 +25,6 @@ class _HomeScreenState extends State<HomeScreen>
   double? _dragValue;
   late final AnimationController _glowController;
   late final Animation<double> _glowAnimation;
-
-
 
   @override
   void initState() {
@@ -249,7 +246,6 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
-      
       body: SafeArea(
         child: Column(
           children: [
@@ -304,45 +300,44 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
       ),
-          background: Stack(
+      background: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. لون الخلفية الأساسي الداكن
+          // 1. لون الخلفية
           Container(color: AppColors.bg),
 
-          // 2. بقعة اللون الأولى (باللون البنفسجي) في أعلى اليسار
+          // 2. البقعة العلوية البنفسجية
           Positioned(
             top: -50.h,
             left: -100.w,
-            child: Container(
-              width: 350.w,
-              height: 350.w,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.violet.withValues(alpha: 0.5), // الشفافية للدمج
+            // نستخدم ImageFiltered لتمويه هذه الدائرة فقط (هذا لا يتعارض مع الزجاج)
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 100.0, sigmaY: 100.0),
+              child: Container(
+                width: 350.w,
+                height: 350.w,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.violet.withValues(alpha: 0.6),
+                ),
               ),
             ),
           ),
 
-          // 3. بقعة اللون الثانية (باللون الليموني) في المنتصف/يمين
+          // 3. البقعة السفلية الليمونية (وضعناها بالأسفل تماماً لتغطي الـ TabBar)
           Positioned(
-            bottom: 100.h,
-            right: -80.w,
-            child: Container(
-              width: 300.w,
-              height: 300.w,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.lime.withValues(alpha: 0.4),
+            bottom: -80.h, // سحبناها للأسفل لتكون تحت الـ TabBar مباشرة
+            right: -50.w,
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 100.0, sigmaY: 100.0),
+              child: Container(
+                width: 350.w,
+                height: 350.w,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.lime.withValues(alpha: 0.45),
+                ),
               ),
-            ),
-          ),
-
-          // 4. السحر: دمج الألوان وتذويبها معاً بضبابية عالية جداً
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 100.0, sigmaY: 100.0), // رقم عالي جداً لتذويب الحواف
-            child: Container(
-              color:  const Color(0x00000000), // هذا هو كود اللون الشفاف,
             ),
           ),
         ],
@@ -372,5 +367,3 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 }
-
-
