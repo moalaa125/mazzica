@@ -9,7 +9,7 @@ class WaveSeekBar extends StatelessWidget {
     required this.inactiveColor,
     required this.onSeek,
     required this.onSeekEnd,
-    this.waveCount = 5, 
+    this.waveCount = 4,
   });
 
   final double progress;
@@ -68,47 +68,61 @@ class _WaveSeekBarPainter extends CustomPainter {
   final Color inactiveColor;
   final int waveCount;
 
-  @override
-  void paint(Canvas canvas, Size size) {
+  // مسار الموجة الثابت — بيتحسب مرة واحدة بناءً على العرض الكلي فقط،
+  // مش بناءً على progress، فشكل الموجة نفسه مايتغيرش أبدًا
+  Path _buildFullWavePath(Size size) {
     const waveHeight = 6.0;
     final midY = size.height / 2;
-    final splitX = size.width * progress;
-
-    // كل موجة كاملة = شريحتين (فوق وتحت)، فطول الشريحة = العرض الكلي ÷ (العدد × 2)
     final segmentLength = size.width / (waveCount * 2);
 
-    Path buildWavePath(double startX, double endX) {
-      final path = Path();
-      path.moveTo(startX, midY);
-      double x = startX;
-      bool goingUp = true;
-      while (x < endX) {
-        final nextX = (x + segmentLength).clamp(startX, endX);
-        path.quadraticBezierTo(
-          x + (nextX - x) / 2,
-          goingUp ? midY - waveHeight : midY + waveHeight,
-          nextX,
-          midY,
-        );
-        x = nextX;
-        goingUp = !goingUp;
-      }
-      return path;
+    final path = Path();
+    path.moveTo(0, midY);
+    double x = 0;
+    bool goingUp = true;
+    while (x < size.width) {
+      final nextX = (x + segmentLength).clamp(0, size.width).toDouble();
+      path.quadraticBezierTo(
+        x + (nextX - x) / 2,
+        goingUp ? midY - waveHeight : midY + waveHeight,
+        nextX,
+        midY,
+      );
+      x = nextX;
+      goingUp = !goingUp;
     }
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fullPath = _buildFullWavePath(size);
+    final splitX = size.width * progress;
+    final midY = size.height / 2;
 
     final activePaint = Paint()
       ..color = activeColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
-    canvas.drawPath(buildWavePath(0, splitX), activePaint);
 
     final inactivePaint = Paint()
       ..color = inactiveColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
-    canvas.drawPath(buildWavePath(splitX, size.width), inactivePaint);
+
+    // نرسم الجزء اللي فات (من 0 لـ splitX) بلون نشط — بنفس مسار الموجة الثابت
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, 0, splitX, size.height));
+    canvas.drawPath(fullPath, activePaint);
+    canvas.restore();
+
+    canvas.save();
+    canvas.clipRect(
+      Rect.fromLTWH(splitX, 0, size.width - splitX, size.height),
+    );
+    canvas.drawPath(fullPath, inactivePaint);
+    canvas.restore();
 
     canvas.drawCircle(Offset(splitX, midY), 7, Paint()..color = activeColor);
   }

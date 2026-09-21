@@ -1,310 +1,291 @@
-  import 'package:flutter/cupertino.dart';
-  import 'package:flutter/material.dart';
-  import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-  import 'package:mazzica/constants/app_color.dart';
-  import 'package:just_audio/just_audio.dart';
-  import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mazzica/constants/app_color.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:mazzica/custom_buttons.dart';
 import 'package:mazzica/widgets/wave.dart';
-  
+import 'package:google_fonts/google_fonts.dart';
 
-  class HomeScreen extends StatefulWidget {
-    const HomeScreen({super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
-    @override
-    State<HomeScreen> createState() => _HomeScreenState();
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  int _tab = 1;
+  final player = AudioPlayer();
+  double? _dragValue;
+  late final AnimationController _glowController;
+  late final Animation<double> _glowAnimation;
+
+  late final List<Widget> pages = [
+    _buildPage('Explore', CupertinoIcons.compass),
+    _buildPage('Music', CupertinoIcons.music_note),
+    _buildPage('Files', CupertinoIcons.folder),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAudio();
+
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _glowAnimation = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    );
   }
 
-  class _HomeScreenState extends State<HomeScreen>
-      with SingleTickerProviderStateMixin {
-    int _tab = 1;
-    final player = AudioPlayer();
-    double? _dragValue;
-    late final AnimationController _glowController;
-    late final Animation<double> _glowAnimation;
-
-    late final List<Widget> pages = [
-      _buildPage('Explore', CupertinoIcons.compass),
-      _buildPage('Music', CupertinoIcons.music_note),
-      _buildPage('Files', CupertinoIcons.folder),
-    ];
-
-    @override
-    void initState() {
-      super.initState();
-      _loadAudio();
-
-      _glowController = AnimationController(
-        vsync: this,
-        duration: const Duration(seconds: 2),
-      )..repeat(reverse: true);
-
-      _glowAnimation = Tween<double>(begin: 0.3, end: 0.7).animate(
-        CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
-      );
+  Future<void> _loadAudio() async {
+    try {
+      await player.setAsset('assets/music/AFROTO - CAPTAIN BLACK.mp3');
+    } catch (e) {
+      debugPrint('Error loading audio: $e');
     }
+  }
 
-    Future<void> _loadAudio() async {
-      try {
-        await player.setAsset('assets/music/AFROTO - CAPTAIN BLACK.mp3');
-      } catch (e) {
-        debugPrint('Error loading audio: $e');
-      }
-    }
+  // String _formatDuration(Duration d) {
+  //   final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  //   final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  //   return '$minutes:$seconds';
+  // }
 
-    // String _formatDuration(Duration d) {
-    //   final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    //   final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    //   return '$minutes:$seconds';
-    // }
+  Widget _buildSeekBar() {
+    return StreamBuilder<Duration?>(
+      stream: player.durationStream,
+      builder: (context, durationSnapshot) {
+        final duration = durationSnapshot.data ?? Duration.zero;
 
-Widget _buildSeekBar() {
-  return StreamBuilder<Duration?>(
-    stream: player.durationStream,
-    builder: (context, durationSnapshot) {
-      final duration = durationSnapshot.data ?? Duration.zero;
+        return StreamBuilder<Duration>(
+          stream: player.positionStream,
+          builder: (context, positionSnapshot) {
+            var position = positionSnapshot.data ?? Duration.zero;
+            if (position > duration) position = duration;
 
-      return StreamBuilder<Duration>(
-        stream: player.positionStream,
-        builder: (context, positionSnapshot) {
-          var position = positionSnapshot.data ?? Duration.zero;
-          if (position > duration) position = duration;
-
-          // المتغيرات دي كانت ناقصة — لازم تتحسب هنا الأول
-          final durationMs = duration.inMilliseconds
-              .toDouble()
-              .clamp(1.0, double.infinity);
-          final positionMs = position.inMilliseconds
-              .toDouble()
-              .clamp(0.0, durationMs);
-          final progress =
-              _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
-
-          return WaveSeekBar(
-            waveCount: 5 ,
-            progress: progress.toDouble(),
-            activeColor: AppColors.lime,
-            inactiveColor: AppColors.textSecondary,
-            onSeek: (value) => setState(() => _dragValue = value),
-            onSeekEnd: (value) {
-              final seekMs = (value * durationMs).toInt();
-              player.seek(Duration(milliseconds: seekMs));
-              setState(() => _dragValue = null);
-            },
-          );
-        },
-      );
-    },
-  );
-}
-    Widget _buildPlayPauseButton() {
-      return StreamBuilder<PlayerState>(
-        stream: player.playerStateStream,
-        builder: (context, snapshot) {
-          final playerState = snapshot.data;
-          final playing = playerState?.playing ?? false;
-          final processingState = playerState?.processingState;
-
-          if (processingState == ProcessingState.loading ||
-              processingState == ProcessingState.buffering) {
-            return SizedBox(
-              width: 40.w,
-              height: 40.w,
-              child: const CircularProgressIndicator(color: AppColors.lime),
+            final durationMs = duration.inMilliseconds.toDouble().clamp(
+              1.0,
+              double.infinity,
             );
-          }
+            final positionMs = position.inMilliseconds.toDouble().clamp(
+              0.0,
+              durationMs,
+            );
+            final progress =
+                _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
 
-          return GlassIconButton(
-            icon: Icon(
-              playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
-              color: AppColors.lime,
-              size: 32.sp,
-            ),
-            shape: GlassIconButtonShape.circle,
-            size: 80.w,
-            onPressed: () {
-              if (playing) {
-                player.pause();
-              } else {
-                player.play();
-              }
-            },
+            return WaveSeekBar(
+              waveCount: 5,
+              progress: progress.toDouble(),
+              activeColor: AppColors.lime,
+              inactiveColor: AppColors.textSecondary,
+              onSeek: (value) => setState(() => _dragValue = value),
+              onSeekEnd: (value) {
+                final seekMs = (value * durationMs).toInt();
+                player.seek(Duration(milliseconds: seekMs));
+                setState(() => _dragValue = null);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPlayPauseButton() {
+    return StreamBuilder<PlayerState>(
+      stream: player.playerStateStream,
+      builder: (context, snapshot) {
+        final playerState = snapshot.data;
+        final playing = playerState?.playing ?? false;
+        final processingState = playerState?.processingState;
+
+        if (processingState == ProcessingState.loading ||
+            processingState == ProcessingState.buffering) {
+          return SizedBox(
+            width: 40.w,
+            height: 40.w,
+            child: const CircularProgressIndicator(color: AppColors.lime),
           );
-        },
-      );
-    }
+        }
 
-    Widget _buildNextEndButton() {
-      return GlassIconButton(
-        icon: Icon(
-          CupertinoIcons.forward_end,
-          color: AppColors.lime,
-          size: 24.sp,
-        ),
-        shape: GlassIconButtonShape.circle,
-        size: 40.w,
-        onPressed: () {
-          final newPosition = player.position + const Duration(seconds: 10);
-          player.seek(
-            newPosition > player.duration! ? player.duration : newPosition,
-          );
-        },
-      );
-    }
+        return CustomButtons(
+          buttonIcon: playing
+              ? CupertinoIcons.pause_fill
+              : CupertinoIcons.play_fill,
+          iconSize: 30.sp,
+          function: () {
+            if (playing) {
+              player.pause();
+            } else {
+              player.play();
+            }
+          },
+          buttonSize: 80.w,
+        );
+      },
+    );
+  }
 
-    Widget _buildBackEndButton() {
-      return GlassIconButton(
-        icon: Icon(
-          CupertinoIcons.backward_end,
-          color: AppColors.lime,
-          size: 24.sp,
-        ),
-        shape: GlassIconButtonShape.circle,
-        size: 40.w,
-        onPressed: () {
-          final newPosition = player.position - const Duration(seconds: 10);
-          player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
-        },
-      );
-    }
+  Widget _buildNextEndButton() {
+    return CustomButtons(
+      buttonIcon: CupertinoIcons.forward_end,
+      iconSize: 24.sp,
+      function: () {
+        final newPosition = player.position + const Duration(seconds: 10);
+        player.seek(
+          newPosition > player.duration! ? player.duration : newPosition,
+        );
+      },
+      buttonSize: 50.w,
+    );
+  }
 
-    Widget _buildEffectButton() {
-      return GlassIconButton(
-        icon: Icon(
-          CupertinoIcons.slider_horizontal_3,
-          color: AppColors.lime,
-          size: 24.sp,
-        ),
-        shape: GlassIconButtonShape.circle,
-        size: 50.w,
-        onPressed: () {},
-      );
-    }
+  Widget _buildBackEndButton() {
+    return CustomButtons(
+      buttonIcon: CupertinoIcons.backward_end,
+      iconSize: 24.sp,
+      function: () {
+        final newPosition = player.position - const Duration(seconds: 10);
+        player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
+      },
+      buttonSize: 50.w,
+    );
+  }
 
-    Widget _buildFolderutton() {
-      return GlassIconButton(
-        icon: Icon(
-          CupertinoIcons.music_note_list,
-          color: AppColors.lime,
-          size: 24.sp,
-        ),
-        shape: GlassIconButtonShape.circle,
-        size: 50.w,
-        onPressed: () {},
-      );
-    }
+  Widget _buildEffectButton() {
+    return GlassIconButton(
+      icon: Icon(
+        CupertinoIcons.slider_horizontal_3,
+        color: AppColors.lime,
+        size: 24.sp,
+      ),
+      shape: GlassIconButtonShape.circle,
+      size: 50.w,
+      onPressed: () {},
+    );
+  }
 
-    Widget _buildTrackInfo() {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'ziad',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18.sp,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 2.h),
-          Text(
-            'Kaptin-Black',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13.sp),
-          ),
-        ],
-      );
-    }
+  Widget _buildFolderutton() {
+    return GlassIconButton(
+      icon: Icon(
+        CupertinoIcons.music_note_list,
+        color: AppColors.lime,
+        size: 24.sp,
+      ),
+      shape: GlassIconButtonShape.circle,
+      size: 50.w,
+      onPressed: () {},
+    );
+  }
 
-    // كونتينر صورة الأغنية بتوهج بنفسجي نابض (لون متمم للصندوق الليموني)
-    Widget _buildGlowingCover() {
-      return AnimatedBuilder(
-        animation: _glowAnimation,
-        builder: (context, child) {
-          final strength = _glowAnimation.value;
+  Widget _buildTrackInfo() {
+    return Column(
+      children: [
+        Text('Kaptin-Black', style: GoogleFonts.rammettoOne(fontSize: 40)),
+        SizedBox(height: 2.h),
+        Text('AFROTO', style: GoogleFonts.lato(fontSize: 20, letterSpacing: 2)),
+      ],
+    );
+  }
 
-          return Container(
-            height: 400.h,
-            width: 450.w,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.lime,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.violet.withValues(alpha: strength),
-                  blurRadius: 15 + (strength * 20),
-                  spreadRadius: -5,
-                ),
-                BoxShadow(
-                  color: AppColors.violet.withValues(alpha: strength * 0.6),
-                  blurRadius: 40 + (strength * 30),
-                ),
-                BoxShadow(
-                  color: AppColors.violet.withValues(alpha: strength * 0.25),
-                  blurRadius: 70 + (strength * 40),
-                  spreadRadius: 10,
-                ),
-              ],
-            ),
-            child: child,
-          );
-        },
-        child: Image.asset('assets/images/Music.png', scale: 1),
-      );
-    }
+  Widget _buildGlowingCover() {
+    return AnimatedBuilder(
+      animation: _glowAnimation,
+      builder: (context, child) {
+        final strength = _glowAnimation.value;
 
-    @override
-    void dispose() {
-      player.dispose();
-      _glowController.dispose();
-      super.dispose();
-    }
-
-    @override
-    Widget build(BuildContext context) {
-      return GlassScaffold(
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: EdgeInsets.only(left: 15.w, right: 15.w),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Mazzica',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 30.sp,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 15.h),
-                    _buildGlowingCover(),
-                    SizedBox(height: 65.h),
-                  ],
-                ),
+        return Container(
+          height: 400.h,
+          width: 450.w,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.lime,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.violet.withValues(alpha: strength),
+                blurRadius: 15 + (strength * 20),
+                spreadRadius: -5,
               ),
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
+              BoxShadow(
+                color: AppColors.violet.withValues(alpha: strength * 0.6),
+                blurRadius: 40 + (strength * 30),
+              ),
+              BoxShadow(
+                color: AppColors.violet.withValues(alpha: strength * 0.25),
+                blurRadius: 70 + (strength * 40),
+                spreadRadius: 10,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: Image.asset('assets/images/Music.png', scale: 1),
+    );
+  }
+
+  @override
+  void dispose() {
+    player.dispose();
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassScaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.only(left: 15.w, right: 15.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mazzica',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 30.sp,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  SizedBox(height: 15.h),
+                  _buildGlowingCover(),
+                  SizedBox(height: 10.h),
+                  Center(child: _buildTrackInfo()),
+                  SizedBox(height: 20.h),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20.r),
+                    topRight: Radius.circular(20.r),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: EdgeInsets.only(left: 10.w, top: 5.h),
-                        child: _buildTrackInfo(),
-                      ),
-                      SizedBox(height: 8.h),
-                      Padding(
                         padding: EdgeInsets.only(left: 10.w, right: 10.w),
                         child: _buildSeekBar(),
                       ),
+                      SizedBox(height: 15.h),
                       Center(
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -321,68 +302,69 @@ Widget _buildSeekBar() {
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [AppColors.bg, AppColors.surface],
-              stops: [0.6, 1.0],
-            ),
-          ),
-        ),
-        backgroundColor: AppColors.bg,
-        bottomBar: GlassTabBar.bottom(
-          selectedIconColor: AppColors.lime,
-          indicatorColor: AppColors.lime.withValues(alpha: 0.18),
-          onTabSelected: (i) => setState(() => _tab = i),
-          tabs: [
-            GlassTab(
-              icon: Icon(CupertinoIcons.compass, size: 24.sp),
-              label: 'Explore',
-            ),
-            GlassTab(
-              icon: Icon(CupertinoIcons.music_note_2, size: 24.sp),
-              label: 'Music',
-            ),
-            GlassTab(
-              icon: Icon(CupertinoIcons.folder, size: 24.sp),
-              label: 'Files',
             ),
           ],
-          selectedIndex: _tab,
         ),
-        statusBarStyle: GlassStatusBarStyle.auto,
-      );
-    }
-  }
-
-  Widget _buildPage(String label, IconData icon) {
-    return Container(
-      color: AppColors.surface,
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: AppColors.lime, size: 40.sp),
-          SizedBox(height: 12.h),
-          Text(
-            label,
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 20.sp,
-              fontWeight: FontWeight.bold,
-            ),
+      ),
+      background: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.bg, AppColors.surface],
+            stops: [0.6, 1.0],
           ),
-          SizedBox(height: 4.h),
-          Text(
-            'Content goes here',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13.sp),
+        ),
+      ),
+      backgroundColor: AppColors.bg,
+      bottomBar: GlassTabBar.bottom(
+        selectedIconColor: AppColors.lime,
+        indicatorColor: AppColors.lime.withValues(alpha: 0.18),
+        onTabSelected: (i) => setState(() => _tab = i),
+        tabs: [
+          GlassTab(
+            icon: Icon(CupertinoIcons.compass, size: 24.sp),
+            label: 'Explore',
+          ),
+          GlassTab(
+            icon: Icon(CupertinoIcons.music_note_2, size: 24.sp),
+            label: 'Music',
+          ),
+          GlassTab(
+            icon: Icon(CupertinoIcons.folder, size: 24.sp),
+            label: 'Files',
           ),
         ],
+        selectedIndex: _tab,
       ),
+      statusBarStyle: GlassStatusBarStyle.auto,
     );
   }
+}
+
+Widget _buildPage(String label, IconData icon) {
+  return Container(
+    color: AppColors.surface,
+    alignment: Alignment.center,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: AppColors.lime, size: 40.sp),
+        SizedBox(height: 12.h),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 20.sp,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 4.h),
+        Text(
+          'Content goes here',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13.sp),
+        ),
+      ],
+    ),
+  );
+}
