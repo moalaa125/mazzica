@@ -15,6 +15,7 @@ dependencies:
   just_audio: ^0.10.6
   flutter_screenutil: ^5.9.3
   google_fonts: ^8.2.1
+  shimmer: ^4.0.0
 
 dev_dependencies:
   flutter_test:

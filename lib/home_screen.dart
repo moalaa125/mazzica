@@ -7,6 +7,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:mazzica/custom_buttons.dart';
 import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:shimmer/shimmer.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,11 +25,7 @@ class _HomeScreenState extends State<HomeScreen>
   late final AnimationController _glowController;
   late final Animation<double> _glowAnimation;
 
-  late final List<Widget> pages = [
-    _buildPage('Explore', CupertinoIcons.compass),
-    _buildPage('Music', CupertinoIcons.music_note),
-    _buildPage('Files', CupertinoIcons.folder),
-  ];
+
 
   @override
   void initState() {
@@ -82,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen>
                 _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
 
             return WaveSeekBar(
-              waveCount: 5,
+              waveCount: 3,
               progress: progress.toDouble(),
               activeColor: AppColors.lime,
               inactiveColor: AppColors.textSecondary,
@@ -105,16 +103,16 @@ class _HomeScreenState extends State<HomeScreen>
       builder: (context, snapshot) {
         final playerState = snapshot.data;
         final playing = playerState?.playing ?? false;
-        final processingState = playerState?.processingState;
+        // final processingState = playerState?.processingState;
 
-        if (processingState == ProcessingState.loading ||
-            processingState == ProcessingState.buffering) {
-          return SizedBox(
-            width: 40.w,
-            height: 40.w,
-            child: const CircularProgressIndicator(color: AppColors.lime),
-          );
-        }
+        // if (processingState == ProcessingState.loading ||
+        //     processingState == ProcessingState.buffering) {
+        //   return SizedBox(
+        //     width: 40.w,
+        //     height: 40.w,
+        //     child: const CircularProgressIndicator(color: AppColors.lime),
+        //   );
+        // }
 
         return CustomButtons(
           buttonIcon: playing
@@ -191,7 +189,14 @@ class _HomeScreenState extends State<HomeScreen>
       children: [
         Text('Kaptin-Black', style: GoogleFonts.rammettoOne(fontSize: 40)),
         SizedBox(height: 2.h),
-        Text('AFROTO', style: GoogleFonts.lato(fontSize: 20, letterSpacing: 2)),
+        Shimmer.fromColors(
+          baseColor: AppColors.textSecondary,
+          highlightColor: AppColors.textPrimary,
+          child: Text(
+            'AFROTO',
+            style: GoogleFonts.abel(fontSize: 20, letterSpacing: 2),
+          ),
+        ),
       ],
     );
   }
@@ -242,6 +247,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
+      
       body: SafeArea(
         child: Column(
           children: [
@@ -263,43 +269,33 @@ class _HomeScreenState extends State<HomeScreen>
                   SizedBox(height: 10.h),
                   Center(child: _buildTrackInfo()),
                   SizedBox(height: 20.h),
+                  Padding(
+                    padding: EdgeInsets.only(left: 20.w, right: 20.w),
+                    child: _buildSeekBar(),
+                  ),
                 ],
               ),
             ),
             Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20.r),
-                    topRight: Radius.circular(20.r),
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.only(left: 10.w, right: 10.w),
-                        child: _buildSeekBar(),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: 15.h),
+                    Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildFolderutton(),
+                          _buildBackEndButton(),
+                          _buildPlayPauseButton(),
+                          _buildNextEndButton(),
+                          _buildEffectButton(),
+                        ],
                       ),
-                      SizedBox(height: 15.h),
-                      Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildFolderutton(),
-                            _buildBackEndButton(),
-                            _buildPlayPauseButton(),
-                            _buildNextEndButton(),
-                            _buildEffectButton(),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -316,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       ),
-      backgroundColor: AppColors.bg,
+      backgroundColor: AppColors.coral,
       bottomBar: GlassTabBar.bottom(
         selectedIconColor: AppColors.lime,
         indicatorColor: AppColors.lime.withValues(alpha: 0.18),
@@ -342,29 +338,4 @@ class _HomeScreenState extends State<HomeScreen>
   }
 }
 
-Widget _buildPage(String label, IconData icon) {
-  return Container(
-    color: AppColors.surface,
-    alignment: Alignment.center,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: AppColors.lime, size: 40.sp),
-        SizedBox(height: 12.h),
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 20.sp,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        SizedBox(height: 4.h),
-        Text(
-          'Content goes here',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 13.sp),
-        ),
-      ],
-    ),
-  );
-}
+

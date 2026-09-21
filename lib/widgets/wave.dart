@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'dart:math' as math;
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 class WaveSeekBar extends StatelessWidget {
   const WaveSeekBar({
@@ -9,7 +11,7 @@ class WaveSeekBar extends StatelessWidget {
     required this.inactiveColor,
     required this.onSeek,
     required this.onSeekEnd,
-    this.waveCount = 4,
+    this.waveCount = 2,
   });
 
   final double progress;
@@ -18,6 +20,9 @@ class WaveSeekBar extends StatelessWidget {
   final ValueChanged<double> onSeek;
   final ValueChanged<double> onSeekEnd;
   final int waveCount;
+
+  static const double waveAmplitude = 10.0;
+  static const double thumbRadius = 14.0;
 
   @override
   Widget build(BuildContext context) {
@@ -28,25 +33,54 @@ class WaveSeekBar extends StatelessWidget {
           onSeek(newProgress);
         }
 
+        final width = constraints.maxWidth;
+        final height = 30.h;
+        final midY = height / 2;
+
+        final splitX = width * progress;
+        final thumbY = midY + waveAmplitude * math.sin(progress * waveCount * 2 * math.pi);
+
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onHorizontalDragUpdate: (details) =>
               handleDrag(details.localPosition.dx),
           onHorizontalDragEnd: (_) => onSeekEnd(progress),
           onTapDown: (details) {
-            handleDrag(details.localPosition.dx);
-            onSeekEnd(progress);
+            final newProgress = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+            onSeek(newProgress);
+            onSeekEnd(newProgress);
           },
           child: SizedBox(
-            height: 30.h,
+            height: height,
             width: double.infinity,
-            child: CustomPaint(
-              painter: _WaveSeekBarPainter(
-                progress: progress,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
-                waveCount: waveCount,
-              ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: height,
+                  child: CustomPaint(
+                    painter: _WaveSeekBarPainter(
+                      progress: progress,
+                      activeColor: activeColor,
+                      inactiveColor: inactiveColor,
+                      waveCount: waveCount,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: splitX - thumbRadius,
+                  top: thumbY - thumbRadius,
+                  child: IgnorePointer(
+                    child: GlassContainer(
+                      glowIntensity: .1,
+                      width: thumbRadius * 2,
+                      height: thumbRadius * 2,
+                      // borderRadius: BorderRadius.circular(thumbRadius),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -68,28 +102,17 @@ class _WaveSeekBarPainter extends CustomPainter {
   final Color inactiveColor;
   final int waveCount;
 
-  // مسار الموجة الثابت — بيتحسب مرة واحدة بناءً على العرض الكلي فقط،
-  // مش بناءً على progress، فشكل الموجة نفسه مايتغيرش أبدًا
   Path _buildFullWavePath(Size size) {
-    const waveHeight = 6.0;
-    final midY = size.height / 2;
-    final segmentLength = size.width / (waveCount * 2);
-
     final path = Path();
+    final midY = size.height / 2;
+
     path.moveTo(0, midY);
-    double x = 0;
-    bool goingUp = true;
-    while (x < size.width) {
-      final nextX = (x + segmentLength).clamp(0, size.width).toDouble();
-      path.quadraticBezierTo(
-        x + (nextX - x) / 2,
-        goingUp ? midY - waveHeight : midY + waveHeight,
-        nextX,
-        midY,
-      );
-      x = nextX;
-      goingUp = !goingUp;
+
+    for (double x = 0; x <= size.width; x += 1) {
+      final y = midY + WaveSeekBar.waveAmplitude * math.sin((x / size.width) * waveCount * 2 * math.pi);
+      path.lineTo(x, y);
     }
+
     return path;
   }
 
@@ -97,21 +120,19 @@ class _WaveSeekBarPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final fullPath = _buildFullWavePath(size);
     final splitX = size.width * progress;
-    final midY = size.height / 2;
 
     final activePaint = Paint()
       ..color = activeColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
+      ..strokeWidth = 4.0
       ..strokeCap = StrokeCap.round;
 
     final inactivePaint = Paint()
       ..color = inactiveColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
+      ..strokeWidth = 4.0
       ..strokeCap = StrokeCap.round;
 
-    // نرسم الجزء اللي فات (من 0 لـ splitX) بلون نشط — بنفس مسار الموجة الثابت
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, splitX, size.height));
     canvas.drawPath(fullPath, activePaint);
@@ -123,8 +144,6 @@ class _WaveSeekBarPainter extends CustomPainter {
     );
     canvas.drawPath(fullPath, inactivePaint);
     canvas.restore();
-
-    canvas.drawCircle(Offset(splitX, midY), 7, Paint()..color = activeColor);
   }
 
   @override
