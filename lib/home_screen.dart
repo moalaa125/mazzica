@@ -9,6 +9,8 @@ import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shimmer/shimmer.dart';
+import 'dart:ui';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -302,17 +304,50 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
       ),
-      background: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.bg, AppColors.surface],
-            stops: [0.6, 1.0],
+          background: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. لون الخلفية الأساسي الداكن
+          Container(color: AppColors.bg),
+
+          // 2. بقعة اللون الأولى (باللون البنفسجي) في أعلى اليسار
+          Positioned(
+            top: -50.h,
+            left: -100.w,
+            child: Container(
+              width: 350.w,
+              height: 350.w,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.violet.withValues(alpha: 0.5), // الشفافية للدمج
+              ),
+            ),
           ),
-        ),
+
+          // 3. بقعة اللون الثانية (باللون الليموني) في المنتصف/يمين
+          Positioned(
+            bottom: 100.h,
+            right: -80.w,
+            child: Container(
+              width: 300.w,
+              height: 300.w,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.lime.withValues(alpha: 0.4),
+              ),
+            ),
+          ),
+
+          // 4. السحر: دمج الألوان وتذويبها معاً بضبابية عالية جداً
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 100.0, sigmaY: 100.0), // رقم عالي جداً لتذويب الحواف
+            child: Container(
+              color:  const Color(0x00000000), // هذا هو كود اللون الشفاف,
+            ),
+          ),
+        ],
       ),
-      backgroundColor: AppColors.coral,
+      backgroundColor: AppColors.bg,
       bottomBar: GlassTabBar.bottom(
         selectedIconColor: AppColors.lime,
         indicatorColor: AppColors.lime.withValues(alpha: 0.18),
