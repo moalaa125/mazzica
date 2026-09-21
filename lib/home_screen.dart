@@ -10,8 +10,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shimmer/shimmer.dart';
 import 'dart:ui';
-import 'package:flutter_arc_text/flutter_arc_text.dart';
-import 'dart:math' as math;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,6 +25,8 @@ class _HomeScreenState extends State<HomeScreen>
   double? _dragValue;
   late final AnimationController _glowController;
   late final Animation<double> _glowAnimation;
+
+
 
   @override
   void initState() {
@@ -188,45 +188,14 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildTrackInfo() {
     return Column(
       children: [
-        // 1. النص المقوس (قمنا بتغليفه للسيطرة على مساحته)
-        SizedBox(
-          height: 55
-              .h, // 🔥 السر هنا: ارتفاع صغير جداً حتى لا تدفع الدائرة الوهمية باقي الأزرار
-          width: double.infinity,
-          child: Stack(
-            alignment: Alignment.topCenter,
-            clipBehavior: Clip.none, // لضمان ظهور النص بحرية
-            children: [
-              Positioned(
-                top: 250, // نثبت النص في الأعلى تماماً
-                child: ArcText(
-                  radius:
-                      200.0, // كبرنا نصف القطر ليكون التقويس هادئاً وجميلاً كالصورة المرجعية
-                  text: 'KAPTIN-BLACK',
-                  textStyle: GoogleFonts.anton(
-                    fontSize: 40.sp,
-                    color: AppColors.textPrimary,
-                    letterSpacing: 2.0,
-                  ),
-                  // 🔥 تصحيح الزاوية لتكون في الأعلى تماماً
-                  startAngle: 0,
-                  startAngleAlignment: StartAngleAlignment.center,
-                  placement: Placement.outside,
-                  direction: Direction.clockwise,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        SizedBox(height: 5.h), // مسافة صغيرة جداً بين الأغنية واسم المطرب
-        // 2. اسم الفنان
+        Text('Kaptin-Black', style: GoogleFonts.rammettoOne(fontSize: 40)),
+        SizedBox(height: 2.h),
         Shimmer.fromColors(
           baseColor: AppColors.textSecondary,
           highlightColor: AppColors.textPrimary,
           child: Text(
             'AFROTO',
-            style: GoogleFonts.abel(fontSize: 20.sp, letterSpacing: 4),
+            style: GoogleFonts.abel(fontSize: 20, letterSpacing: 2),
           ),
         ),
       ],
@@ -279,6 +248,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
+      
       body: SafeArea(
         child: Column(
           children: [
@@ -333,47 +303,15 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
       ),
-      background: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 1. لون الخلفية
-          Container(color: AppColors.bg),
-
-          // 2. البقعة العلوية البنفسجية
-          Positioned(
-            top: -50.h,
-            left: -100.w,
-            // نستخدم ImageFiltered لتمويه هذه الدائرة فقط (هذا لا يتعارض مع الزجاج)
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 100.0, sigmaY: 100.0),
-              child: Container(
-                width: 350.w,
-                height: 350.w,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.violet.withValues(alpha: 0.6),
-                ),
-              ),
-            ),
+      background: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.bg, AppColors.surface],
+            stops: [0.6, 1.0],
           ),
-
-          // 3. البقعة السفلية الليمونية (وضعناها بالأسفل تماماً لتغطي الـ TabBar)
-          Positioned(
-            bottom: -80.h, // سحبناها للأسفل لتكون تحت الـ TabBar مباشرة
-            right: -50.w,
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 100.0, sigmaY: 100.0),
-              child: Container(
-                width: 350.w,
-                height: 350.w,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.lime.withValues(alpha: 0.45),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       backgroundColor: AppColors.bg,
       bottomBar: GlassTabBar.bottom(
@@ -400,3 +338,5 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 }
+
+
