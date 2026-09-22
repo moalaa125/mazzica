@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shimmer/shimmer.dart';
 import 'dart:ui';
+import 'package:lottie/lottie.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,8 +26,6 @@ class _HomeScreenState extends State<HomeScreen>
   double? _dragValue;
   late final AnimationController _glowController;
   late final Animation<double> _glowAnimation;
-
-
 
   @override
   void initState() {
@@ -50,12 +49,6 @@ class _HomeScreenState extends State<HomeScreen>
       debugPrint('Error loading audio: $e');
     }
   }
-
-  // String _formatDuration(Duration d) {
-  //   final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-  //   final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-  //   return '$minutes:$seconds';
-  // }
 
   Widget _buildSeekBar() {
     return StreamBuilder<Duration?>(
@@ -81,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen>
                 _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
 
             return WaveSeekBar(
-              waveCount: 3,
+              waveCount: 2,
               progress: progress.toDouble(),
               activeColor: AppColors.lime,
               inactiveColor: AppColors.textSecondary,
@@ -104,17 +97,6 @@ class _HomeScreenState extends State<HomeScreen>
       builder: (context, snapshot) {
         final playerState = snapshot.data;
         final playing = playerState?.playing ?? false;
-        // final processingState = playerState?.processingState;
-
-        // if (processingState == ProcessingState.loading ||
-        //     processingState == ProcessingState.buffering) {
-        //   return SizedBox(
-        //     width: 40.w,
-        //     height: 40.w,
-        //     child: const CircularProgressIndicator(color: AppColors.lime),
-        //   );
-        // }
-
         return CustomButtons(
           buttonIcon: playing
               ? CupertinoIcons.pause_fill
@@ -209,32 +191,38 @@ class _HomeScreenState extends State<HomeScreen>
         final strength = _glowAnimation.value;
 
         return Container(
-          height: 400.h,
+          height: 350.h,
           width: 450.w,
           decoration: BoxDecoration(
+            border: Border.all(color: AppColors.lime),
             shape: BoxShape.circle,
-            color: AppColors.lime,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.violet.withValues(alpha: strength),
-                blurRadius: 15 + (strength * 20),
-                spreadRadius: -5,
-              ),
-              BoxShadow(
-                color: AppColors.violet.withValues(alpha: strength * 0.6),
-                blurRadius: 40 + (strength * 30),
-              ),
-              BoxShadow(
-                color: AppColors.violet.withValues(alpha: strength * 0.25),
-                blurRadius: 70 + (strength * 40),
-                spreadRadius: 10,
-              ),
-            ],
+            color: AppColors.bg,
+            // boxShadow: [
+            //   BoxShadow(
+            //     color: AppColors.violet.withValues(alpha: strength),
+            //     blurRadius: 15 + (strength * 20),
+            //     spreadRadius: -5,
+            //   ),
+            //   BoxShadow(
+            //     color: AppColors.violet.withValues(alpha: strength * 0.6),
+            //     blurRadius: 40 + (strength * 30),
+            //   ),
+            //   BoxShadow(
+            //     color: AppColors.violet.withValues(alpha: strength * 0.25),
+            //     blurRadius: 70 + (strength * 40),
+            //     spreadRadius: 10,
+            //   ),
+            // ],
           ),
           child: child,
         );
       },
-      child: Image.asset('assets/images/Music.png', scale: 1),
+      child: Lottie.asset(
+        'assets/animations/music.lottie',
+        width: 100,
+        height: 100,
+        frameRate: FrameRate.max,
+      ),
     );
   }
 
@@ -248,7 +236,6 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
-      
       body: SafeArea(
         child: Column(
           children: [
@@ -338,5 +325,3 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 }
-
-

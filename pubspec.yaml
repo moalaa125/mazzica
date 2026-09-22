@@ -17,6 +17,7 @@ dependencies:
   google_fonts: ^8.2.1
   shimmer: ^4.0.0
   flutter_arc_text: ^0.6.0
+  lottie: ^3.6.1
 
 dev_dependencies:
   flutter_test:
@@ -30,3 +31,4 @@ flutter:
   assets:
     - assets/images/
     - assets/music/
+    - assets/animations/

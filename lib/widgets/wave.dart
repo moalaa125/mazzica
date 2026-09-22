@@ -34,11 +34,12 @@ class WaveSeekBar extends StatelessWidget {
         }
 
         final width = constraints.maxWidth;
-        final height = 30.h;
+        final height = 25.h;
         final midY = height / 2;
 
         final splitX = width * progress;
-        final thumbY = midY + waveAmplitude * math.sin(progress * waveCount * 2 * math.pi);
+        final thumbY =
+            midY + waveAmplitude * math.sin(progress * waveCount * 2 * math.pi);
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -46,7 +47,11 @@ class WaveSeekBar extends StatelessWidget {
               handleDrag(details.localPosition.dx),
           onHorizontalDragEnd: (_) => onSeekEnd(progress),
           onTapDown: (details) {
-            final newProgress = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+            final newProgress =
+                (details.localPosition.dx / constraints.maxWidth).clamp(
+                  0.0,
+                  1.0,
+                );
             onSeek(newProgress);
             onSeekEnd(newProgress);
           },
@@ -109,7 +114,10 @@ class _WaveSeekBarPainter extends CustomPainter {
     path.moveTo(0, midY);
 
     for (double x = 0; x <= size.width; x += 1) {
-      final y = midY + WaveSeekBar.waveAmplitude * math.sin((x / size.width) * waveCount * 2 * math.pi);
+      final y =
+          midY +
+          WaveSeekBar.waveAmplitude *
+              math.sin((x / size.width) * waveCount * 2 * math.pi);
       path.lineTo(x, y);
     }
 
@@ -139,9 +147,7 @@ class _WaveSeekBarPainter extends CustomPainter {
     canvas.restore();
 
     canvas.save();
-    canvas.clipRect(
-      Rect.fromLTWH(splitX, 0, size.width - splitX, size.height),
-    );
+    canvas.clipRect(Rect.fromLTWH(splitX, 0, size.width - splitX, size.height));
     canvas.drawPath(fullPath, inactivePaint);
     canvas.restore();
   }
