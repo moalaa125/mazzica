@@ -1,6 +1,6 @@
-import 'dart:async'; 
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
 import 'package:just_audio/just_audio.dart';
@@ -10,6 +10,7 @@ import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:lottie/lottie.dart';
+import 'package:audio_session/audio_session.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,16 +19,15 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with TickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _tab = 1;
   final player = AudioPlayer();
   double? _dragValue;
-  
+
   late final AnimationController _glowController;
   late final Animation<double> _glowAnimation;
-  late final AnimationController _lottieController; 
-  
+  late final AnimationController _lottieController;
+
   StreamSubscription<PlayerState>? _playerStateSubscription;
 
   @override
@@ -44,9 +44,7 @@ class _HomeScreenState extends State<HomeScreen>
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
 
-    _lottieController = AnimationController(
-      vsync: this,
-    );
+    _lottieController = AnimationController(vsync: this);
 
     _playerStateSubscription = player.playerStateStream.listen((state) {
       if (state.playing) {
@@ -61,7 +59,19 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadAudio() async {
     try {
-      await player.setAsset('assets/music/AFROTO - CAPTAIN BLACK.mp3');
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+
+      await player.setAudioSource(
+        AudioSource.asset(
+          'assets/music/AFROTO - CAPTAIN BLACK.mp3',
+          tag: MediaItem(
+            id: 'kaptin-black-1',
+            title: 'Captain Black',
+            artist: 'AFROTO',
+          ),
+        ),
+      );
     } catch (e) {
       debugPrint('Error loading audio: $e');
     }
@@ -238,9 +248,9 @@ class _HomeScreenState extends State<HomeScreen>
         width: 100,
         height: 100,
         frameRate: FrameRate.max,
-        controller: _lottieController, 
+        controller: _lottieController,
         onLoaded: (composition) {
-          _lottieController.duration = composition.duration; 
+          _lottieController.duration = composition.duration;
           if (player.playing) {
             _lottieController.repeat();
           }
