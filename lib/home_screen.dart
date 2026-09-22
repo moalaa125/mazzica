@@ -1,3 +1,4 @@
+import 'dart:async'; // تم إضافة هذا السطر
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -19,27 +20,53 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+// تغيير SingleTickerProviderStateMixin إلى TickerProviderStateMixin
 class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   int _tab = 1;
   final player = AudioPlayer();
   double? _dragValue;
+  
+  // متحكمات الأنيميشن
   late final AnimationController _glowController;
   late final Animation<double> _glowAnimation;
+  late final AnimationController _lottieController; // إضافة متحكم لوتي
+  
+  // مراقب حالة تشغيل الموسيقى
+  StreamSubscription<PlayerState>? _playerStateSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadAudio();
 
+    // 1. تهيئة متحكم التوهج (تم إزالة ..repeat(reverse:true) من هنا)
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
+    );
 
     _glowAnimation = Tween<double>(begin: 0.3, end: 0.7).animate(
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
+
+    // 2. تهيئة متحكم Lottie
+    _lottieController = AnimationController(
+      vsync: this,
+    );
+
+    // 3. الاستماع لحالة الصوت لتشغيل وإيقاف الأنيميشن
+    _playerStateSubscription = player.playerStateStream.listen((state) {
+      if (state.playing) {
+        // تشغيل تأثير التوهج وحركة لوتي عند التشغيل
+        _glowController.repeat(reverse: true);
+        _lottieController.repeat();
+      } else {
+        // إيقاف تأثير التوهج وحركة لوتي عند الإيقاف المؤقت
+        _glowController.stop();
+        _lottieController.stop();
+      }
+    });
   }
 
   Future<void> _loadAudio() async {
@@ -221,14 +248,27 @@ class _HomeScreenState extends State<HomeScreen>
         width: 100,
         height: 100,
         frameRate: FrameRate.max,
+        controller: _lottieController, // 1. ربط المتحكم الجديد بالأنيميشن
+        onLoaded: (composition) {
+          // 2. ضبط مدة المتحكم لتتطابق مع مدة الأنيميشن الأصلي
+          _lottieController.duration = composition.duration;
+          
+          // في حال كانت الموسيقى تعمل أثناء التحميل، نضمن تشغيله
+          if (player.playing) {
+            _lottieController.repeat();
+          }
+        },
       ),
     );
   }
 
   @override
   void dispose() {
-    player.dispose();
+    // إغلاق كل الموارد بشكل صحيح
+    _playerStateSubscription?.cancel();
+    _lottieController.dispose();
     _glowController.dispose();
+    player.dispose();
     super.dispose();
   }
 
