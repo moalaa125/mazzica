@@ -1,4 +1,4 @@
-import 'dart:async'; // تم إضافة هذا السطر
+import 'dart:async'; 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -8,9 +8,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:mazzica/custom_buttons.dart';
 import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:shimmer/shimmer.dart';
-import 'dart:ui';
 import 'package:lottie/lottie.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,19 +18,16 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-// تغيير SingleTickerProviderStateMixin إلى TickerProviderStateMixin
 class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin {
   int _tab = 1;
   final player = AudioPlayer();
   double? _dragValue;
   
-  // متحكمات الأنيميشن
   late final AnimationController _glowController;
   late final Animation<double> _glowAnimation;
-  late final AnimationController _lottieController; // إضافة متحكم لوتي
+  late final AnimationController _lottieController; 
   
-  // مراقب حالة تشغيل الموسيقى
   StreamSubscription<PlayerState>? _playerStateSubscription;
 
   @override
@@ -40,7 +35,6 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
     _loadAudio();
 
-    // 1. تهيئة متحكم التوهج (تم إزالة ..repeat(reverse:true) من هنا)
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -50,19 +44,15 @@ class _HomeScreenState extends State<HomeScreen>
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
 
-    // 2. تهيئة متحكم Lottie
     _lottieController = AnimationController(
       vsync: this,
     );
 
-    // 3. الاستماع لحالة الصوت لتشغيل وإيقاف الأنيميشن
     _playerStateSubscription = player.playerStateStream.listen((state) {
       if (state.playing) {
-        // تشغيل تأثير التوهج وحركة لوتي عند التشغيل
         _glowController.repeat(reverse: true);
         _lottieController.repeat();
       } else {
-        // إيقاف تأثير التوهج وحركة لوتي عند الإيقاف المؤقت
         _glowController.stop();
         _lottieController.stop();
       }
@@ -248,12 +238,9 @@ class _HomeScreenState extends State<HomeScreen>
         width: 100,
         height: 100,
         frameRate: FrameRate.max,
-        controller: _lottieController, // 1. ربط المتحكم الجديد بالأنيميشن
+        controller: _lottieController, 
         onLoaded: (composition) {
-          // 2. ضبط مدة المتحكم لتتطابق مع مدة الأنيميشن الأصلي
-          _lottieController.duration = composition.duration;
-          
-          // في حال كانت الموسيقى تعمل أثناء التحميل، نضمن تشغيله
+          _lottieController.duration = composition.duration; 
           if (player.playing) {
             _lottieController.repeat();
           }
@@ -264,7 +251,6 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
-    // إغلاق كل الموارد بشكل صحيح
     _playerStateSubscription?.cancel();
     _lottieController.dispose();
     _glowController.dispose();
