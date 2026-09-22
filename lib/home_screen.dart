@@ -189,7 +189,6 @@ class _HomeScreenState extends State<HomeScreen>
       animation: _glowAnimation,
       builder: (context, child) {
         final strength = _glowAnimation.value;
-
         return Container(
           height: 350.h,
           width: 450.w,
@@ -197,22 +196,22 @@ class _HomeScreenState extends State<HomeScreen>
             border: Border.all(color: AppColors.lime),
             shape: BoxShape.circle,
             color: AppColors.bg,
-            // boxShadow: [
-            //   BoxShadow(
-            //     color: AppColors.violet.withValues(alpha: strength),
-            //     blurRadius: 15 + (strength * 20),
-            //     spreadRadius: -5,
-            //   ),
-            //   BoxShadow(
-            //     color: AppColors.violet.withValues(alpha: strength * 0.6),
-            //     blurRadius: 40 + (strength * 30),
-            //   ),
-            //   BoxShadow(
-            //     color: AppColors.violet.withValues(alpha: strength * 0.25),
-            //     blurRadius: 70 + (strength * 40),
-            //     spreadRadius: 10,
-            //   ),
-            // ],
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.violet.withValues(alpha: strength),
+                blurRadius: 15 + (strength * 20),
+                spreadRadius: -5,
+              ),
+              BoxShadow(
+                color: AppColors.violet.withValues(alpha: strength * 0.6),
+                blurRadius: 40 + (strength * 30),
+              ),
+              BoxShadow(
+                color: AppColors.violet.withValues(alpha: strength * 0.25),
+                blurRadius: 70 + (strength * 40),
+                spreadRadius: 10,
+              ),
+            ],
           ),
           child: child,
         );
@@ -254,9 +253,9 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                   SizedBox(height: 15.h),
                   _buildGlowingCover(),
-                  SizedBox(height: 10.h),
+                  SizedBox(height: 25.h),
                   Center(child: _buildTrackInfo()),
-                  SizedBox(height: 20.h),
+                  SizedBox(height: 50.h),
                   Padding(
                     padding: EdgeInsets.only(left: 20.w, right: 20.w),
                     child: _buildSeekBar(),
