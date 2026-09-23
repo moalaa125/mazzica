@@ -244,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void dispose() {
     _playerStateSubscription?.cancel();
     _lottieController.dispose();
-    _glowController.dispose();
+    _glowController.dispose();  
     super.dispose();
   }
 

@@ -17,14 +17,31 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
     _player.playbackEventStream.listen(_broadcastState);
 
-    await _player.setAudioSource(
+    _player.durationStream.listen((duration) {
+      final currentItem = mediaItem.value;
+      if (currentItem != null && duration != null) {
+        mediaItem.add(currentItem.copyWith(duration: duration));
+      }
+    });
+
+    final duration = await _player.setAudioSource(
       AudioSource.asset(
         'assets/music/AFROTO - CAPTAIN BLACK.mp3',
         tag: MediaItem(
           id: 'kaptin-black-1',
           title: 'Captain Black',
           artist: 'AFROTO',
+          duration: null, 
         ),
+      ),
+    );
+
+    mediaItem.add(
+      MediaItem(
+        id: 'kaptin-black-1',
+        title: 'Captain Black',
+        artist: 'AFROTO',
+        duration: duration,
       ),
     );
   }
