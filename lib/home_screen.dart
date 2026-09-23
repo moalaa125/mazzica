@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
 import 'package:just_audio/just_audio.dart';
@@ -11,7 +10,6 @@ import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:lottie/lottie.dart';
-import 'package:audio_session/audio_session.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,7 +20,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _tab = 1;
-  final player = audioHandler.player;
+  late final AudioPlayer player;
   double? _dragValue;
 
   late final AnimationController _glowController;
@@ -34,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _loadAudio();
+    player = audioHandler.player;
 
     _glowController = AnimationController(
       vsync: this,
@@ -56,26 +54,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _lottieController.stop();
       }
     });
-  }
-
-  Future<void> _loadAudio() async {
-    try {
-      final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.music());
-
-      await player.setAudioSource(
-        AudioSource.asset(
-          'assets/music/AFROTO - CAPTAIN BLACK.mp3',
-          tag: MediaItem(
-            id: 'kaptin-black-1',
-            title: 'Captain Black',
-            artist: 'AFROTO',
-          ),
-        ),
-      );
-    } catch (e) {
-      debugPrint('Error loading audio: $e');
-    }
   }
 
   Widget _buildSeekBar() {
@@ -109,7 +87,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onSeek: (value) => setState(() => _dragValue = value),
               onSeekEnd: (value) {
                 final seekMs = (value * durationMs).toInt();
-                player.seek(Duration(milliseconds: seekMs));
+                audioHandler.seek(Duration(milliseconds: seekMs));
                 setState(() => _dragValue = null);
               },
             );
@@ -149,8 +127,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       iconSize: 24.sp,
       function: () {
         final newPosition = player.position + const Duration(seconds: 10);
-        player.seek(
-          newPosition > player.duration! ? player.duration : newPosition,
+        audioHandler.seek(
+          newPosition > player.duration! ? player.duration! : newPosition,
         );
       },
       buttonSize: 50.w,
@@ -163,7 +141,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       iconSize: 24.sp,
       function: () {
         final newPosition = player.position - const Duration(seconds: 10);
-        player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
+        audioHandler.seek(
+          newPosition < Duration.zero ? Duration.zero : newPosition,
+        );
       },
       buttonSize: 50.w,
     );
@@ -265,7 +245,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _playerStateSubscription?.cancel();
     _lottieController.dispose();
     _glowController.dispose();
-    player.dispose();
     super.dispose();
   }
 
