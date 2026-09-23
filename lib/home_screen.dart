@@ -6,6 +6,7 @@ import 'package:mazzica/constants/app_color.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:mazzica/custom_buttons.dart';
+import 'package:mazzica/main.dart';
 import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
@@ -21,7 +22,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _tab = 1;
-  final player = AudioPlayer();
+  final player = audioHandler.player;
   double? _dragValue;
 
   late final AnimationController _glowController;
@@ -131,9 +132,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           iconSize: 30.sp,
           function: () {
             if (playing) {
-              player.pause();
+              audioHandler.pause();
             } else {
-              player.play();
+              audioHandler.play();
             }
           },
           buttonSize: 80.w,

@@ -19,6 +19,7 @@ dependencies:
   flutter_arc_text: ^0.6.0
   lottie: ^3.6.1
   just_audio_background: ^0.0.1-beta.17
+  audio_service: ^0.18.19
 
 dev_dependencies:
   flutter_test:
