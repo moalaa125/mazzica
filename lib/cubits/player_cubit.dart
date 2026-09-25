@@ -2,6 +2,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:mazzica/main.dart';
 import 'player_state.dart';
+import 'package:haudiotagger/haudiotagger.dart';
+import 'package:path/path.dart' as p;
 
 class PlayerCubit extends Cubit<PlayerAppState> {
   PlayerCubit() : super(const PlayerAppState()) {
@@ -29,16 +31,37 @@ class PlayerCubit extends Cubit<PlayerAppState> {
     });
   }
 
-  Future<void> pickAndPlayFile() async {
-    final List<PlatformFile> files = await FilePicker.pickFiles(
-      type: FileType.audio,
-    );
+Future<void> pickAndPlayFile() async {
+  final List<PlatformFile> files = await FilePicker.pickFiles(
+    type: FileType.audio,
+  );
 
-    if (files.isNotEmpty && files.single.path != null) {
-      await player.setFilePath(files.single.path!);
-      audioHandler.play();
+  if (files.isNotEmpty && files.single.path != null) {
+    final path = files.single.path!;
+
+    await player.setFilePath(path);
+    audioHandler.play();
+
+    String title = p.basenameWithoutExtension(path); 
+    String artist = 'Unknown Artist';
+
+    try {
+      final tag = await Haudiotagger.read(path);
+      if (tag != null) {
+        if (tag.title != null && tag.title!.trim().isNotEmpty) {
+          title = tag.title!;
+        }
+        if (tag.trackArtist != null && tag.trackArtist!.trim().isNotEmpty) {
+          artist = tag.trackArtist!;
+        }
+      }
+    } catch (e) {
+      print('there is no data');
     }
+
+    emit(state.copyWith(title: title, artist: artist));
   }
+}
 
   void playPause() {
     if (state.isPlaying) {
