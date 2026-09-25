@@ -1,11 +1,11 @@
-import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:mazzica/custom_buttons.dart';
-import 'package:mazzica/main.dart';
+import 'package:mazzica/cubits/player_cubit.dart';
+import 'package:mazzica/cubits/player_state.dart';
 import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
@@ -18,21 +18,18 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  int _tab = 1;
-  late final AudioPlayer player;
+class _HomeScreenState extends State<HomeScreen>
+    with TickerProviderStateMixin {
+  int _tab = 1; 
   double? _dragValue;
 
   late final AnimationController _glowController;
   late final Animation<double> _glowAnimation;
   late final AnimationController _lottieController;
 
-  StreamSubscription<PlayerState>? _playerStateSubscription;
-
   @override
   void initState() {
     super.initState();
-    player = audioHandler.player;
 
     _glowController = AnimationController(
       vsync: this,
@@ -44,53 +41,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
 
     _lottieController = AnimationController(vsync: this);
-
-    _playerStateSubscription = player.playerStateStream.listen((state) {
-      if (state.playing) {
-        _glowController.repeat(reverse: true);
-        _lottieController.repeat();
-      } else {
-        _glowController.stop();
-        _lottieController.stop();
-      }
-    });
   }
 
   Widget _buildSeekBar() {
-    return StreamBuilder<Duration?>(
-      stream: player.durationStream,
-      builder: (context, durationSnapshot) {
-        final duration = durationSnapshot.data ?? Duration.zero;
+    return BlocBuilder<PlayerCubit, PlayerAppState>(
+      builder: (context, state) {
+        final durationMs = state.duration.inMilliseconds
+            .toDouble()
+            .clamp(1.0, double.infinity);
+        final positionMs = state.position.inMilliseconds
+            .toDouble()
+            .clamp(0.0, durationMs);
+        final progress =
+            _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
 
-        return StreamBuilder<Duration>(
-          stream: player.positionStream,
-          builder: (context, positionSnapshot) {
-            var position = positionSnapshot.data ?? Duration.zero;
-            if (position > duration) position = duration;
-
-            final durationMs = duration.inMilliseconds.toDouble().clamp(
-              1.0,
-              double.infinity,
-            );
-            final positionMs = position.inMilliseconds.toDouble().clamp(
-              0.0,
-              durationMs,
-            );
-            final progress =
-                _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
-
-            return WaveSeekBar(
-              waveCount: 2,
-              progress: progress.toDouble(),
-              activeColor: AppColors.lime,
-              inactiveColor: AppColors.textSecondary,
-              onSeek: (value) => setState(() => _dragValue = value),
-              onSeekEnd: (value) {
-                final seekMs = (value * durationMs).toInt();
-                audioHandler.seek(Duration(milliseconds: seekMs));
-                setState(() => _dragValue = null);
-              },
-            );
+        return WaveSeekBar(
+          waveCount: 2,
+          progress: progress.toDouble(),
+          activeColor: AppColors.lime,
+          inactiveColor: AppColors.textSecondary,
+          onSeek: (value) => setState(() => _dragValue = value),
+          onSeekEnd: (value) {
+            final seekMs = (value * durationMs).toInt();
+            context.read<PlayerCubit>().seek(Duration(milliseconds: seekMs));
+            setState(() => _dragValue = null);
           },
         );
       },
@@ -98,23 +72,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildPlayPauseButton() {
-    return StreamBuilder<PlayerState>(
-      stream: player.playerStateStream,
-      builder: (context, snapshot) {
-        final playerState = snapshot.data;
-        final playing = playerState?.playing ?? false;
+    return BlocBuilder<PlayerCubit, PlayerAppState>(
+      builder: (context, state) {
         return CustomButtons(
-          buttonIcon: playing
+          buttonIcon: state.isPlaying
               ? CupertinoIcons.pause_fill
               : CupertinoIcons.play_fill,
           iconSize: 30.sp,
-          function: () {
-            if (playing) {
-              audioHandler.pause();
-            } else {
-              audioHandler.play();
-            }
-          },
+          function: () => context.read<PlayerCubit>().playPause(),
           buttonSize: 80.w,
         );
       },
@@ -125,12 +90,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return CustomButtons(
       buttonIcon: CupertinoIcons.forward_end,
       iconSize: 24.sp,
-      function: () {
-        final newPosition = player.position + const Duration(seconds: 10);
-        audioHandler.seek(
-          newPosition > player.duration! ? player.duration! : newPosition,
-        );
-      },
+      function: () => context.read<PlayerCubit>().seekForward10(),
       buttonSize: 50.w,
     );
   }
@@ -139,12 +99,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return CustomButtons(
       buttonIcon: CupertinoIcons.backward_end,
       iconSize: 24.sp,
-      function: () {
-        final newPosition = player.position - const Duration(seconds: 10);
-        audioHandler.seek(
-          newPosition < Duration.zero ? Duration.zero : newPosition,
-        );
-      },
+      function: () => context.read<PlayerCubit>().seekBackward10(),
       buttonSize: 50.w,
     );
   }
@@ -232,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         controller: _lottieController,
         onLoaded: (composition) {
           _lottieController.duration = composition.duration;
-          if (player.playing) {
+          if (context.read<PlayerCubit>().state.isPlaying) {
             _lottieController.repeat();
           }
         },
@@ -242,101 +197,112 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _playerStateSubscription?.cancel();
     _lottieController.dispose();
-    _glowController.dispose();  
+    _glowController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return GlassScaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.only(left: 15.w, right: 15.w),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Mazzica',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 30.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 15.h),
-                  _buildGlowingCover(),
-                  SizedBox(height: 25.h),
-                  Center(child: _buildTrackInfo()),
-                  SizedBox(height: 50.h),
-                  Padding(
-                    padding: EdgeInsets.only(left: 20.w, right: 20.w),
-                    child: _buildSeekBar(),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 20),
+    return BlocListener<PlayerCubit, PlayerAppState>(
+      listenWhen: (previous, current) => previous.isPlaying != current.isPlaying,
+      listener: (context, state) {
+        if (state.isPlaying) {
+          _glowController.repeat(reverse: true);
+          _lottieController.repeat();
+        } else {
+          _glowController.stop();
+          _lottieController.stop();
+        }
+      },
+      child: GlassScaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.only(left: 15.w, right: 15.w),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(height: 15.h),
-                    Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildFolderutton(),
-                          _buildBackEndButton(),
-                          _buildPlayPauseButton(),
-                          _buildNextEndButton(),
-                          _buildEffectButton(),
-                        ],
+                    Text(
+                      'Mazzica',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 30.sp,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    SizedBox(height: 15.h),
+                    _buildGlowingCover(),
+                    SizedBox(height: 25.h),
+                    Center(child: _buildTrackInfo()),
+                    SizedBox(height: 50.h),
+                    Padding(
+                      padding: EdgeInsets.only(left: 20.w, right: 20.w),
+                      child: _buildSeekBar(),
                     ),
                   ],
                 ),
               ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 15.h),
+                      Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildFolderutton(),
+                            _buildBackEndButton(),
+                            _buildPlayPauseButton(),
+                            _buildNextEndButton(),
+                            _buildEffectButton(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [AppColors.bg, AppColors.surface],
+              stops: [0.6, 1.0],
+            ),
+          ),
+        ),
+        backgroundColor: AppColors.bg,
+        bottomBar: GlassTabBar.bottom(
+          selectedIconColor: AppColors.lime,
+          indicatorColor: AppColors.lime.withValues(alpha: 0.18),
+          onTabSelected: (i) => setState(() => _tab = i),
+          tabs: [
+            GlassTab(
+              icon: Icon(CupertinoIcons.compass, size: 24.sp),
+              label: 'Explore',
+            ),
+            GlassTab(
+              icon: Icon(CupertinoIcons.music_note_2, size: 24.sp),
+              label: 'Music',
+            ),
+            GlassTab(
+              icon: Icon(CupertinoIcons.folder, size: 24.sp),
+              label: 'Files',
             ),
           ],
+          selectedIndex: _tab,
         ),
+        statusBarStyle: GlassStatusBarStyle.auto,
       ),
-      background: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.bg, AppColors.surface],
-            stops: [0.6, 1.0],
-          ),
-        ),
-      ),
-      backgroundColor: AppColors.bg,
-      bottomBar: GlassTabBar.bottom(
-        selectedIconColor: AppColors.lime,
-        indicatorColor: AppColors.lime.withValues(alpha: 0.18),
-        onTabSelected: (i) => setState(() => _tab = i),
-        tabs: [
-          GlassTab(
-            icon: Icon(CupertinoIcons.compass, size: 24.sp),
-            label: 'Explore',
-          ),
-          GlassTab(
-            icon: Icon(CupertinoIcons.music_note_2, size: 24.sp),
-            label: 'Music',
-          ),
-          GlassTab(
-            icon: Icon(CupertinoIcons.folder, size: 24.sp),
-            label: 'Files',
-          ),
-        ],
-        selectedIndex: _tab,
-      ),
-      statusBarStyle: GlassStatusBarStyle.auto,
     );
   }
 }

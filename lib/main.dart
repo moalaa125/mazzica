@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
+import 'package:mazzica/cubits/player_cubit.dart';
 import 'package:mazzica/home_screen.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:mazzica/widgets/audio_handler.dart';
@@ -57,13 +59,16 @@ class MyApp extends StatelessWidget {
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'Mazzica',
-          builder: (context, child) =>
-              Material(type: MaterialType.transparency, child: child!),
-          theme: ThemeData.dark(),
-          home: const HomeScreen(),
+        return BlocProvider(
+          create: (_) => PlayerCubit(),
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Mazzica',
+            builder: (context, child) =>
+                Material(type: MaterialType.transparency, child: child!),
+            theme: ThemeData.dark(),
+            home: const HomeScreen(),
+          ),
         );
       },
     );
