@@ -70,5 +70,7 @@
 	<array>
     	<string>audio</string>
 	</array>
+	<key>UISupportsDocumentBrowser</key>
+	<true/>
 </dict>
 </plist>
