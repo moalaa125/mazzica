@@ -11,6 +11,17 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _init();
   }
 
+    Future<void> updateCurrentTrackInfo(String title, String artist) async {
+  final currentItem = mediaItem.value;
+  if (currentItem != null) {
+    mediaItem.add(currentItem.copyWith(
+      title: title,
+      artist: artist,
+    ));
+  }
+}
+
+
   Future<void> _init() async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());

@@ -31,37 +31,39 @@ class PlayerCubit extends Cubit<PlayerAppState> {
     });
   }
 
-Future<void> pickAndPlayFile() async {
-  final List<PlatformFile> files = await FilePicker.pickFiles(
-    type: FileType.audio,
-  );
+  Future<void> pickAndPlayFile() async {
+    final List<PlatformFile> files = await FilePicker.pickFiles(
+      type: FileType.audio,
+    );
 
-  if (files.isNotEmpty && files.single.path != null) {
-    final path = files.single.path!;
+    if (files.isNotEmpty && files.single.path != null) {
+      final path = files.single.path!;
 
-    await player.setFilePath(path);
-    audioHandler.play();
+      await player.setFilePath(path);
+      audioHandler.play();
 
-    String title = p.basenameWithoutExtension(path); 
-    String artist = 'Unknown Artist';
+      String title = p.basenameWithoutExtension(path);
+      String artist = 'Unknown Artist';
 
-    try {
-      final tag = await Haudiotagger.read(path);
-      if (tag != null) {
-        if (tag.title != null && tag.title!.trim().isNotEmpty) {
-          title = tag.title!;
+      try {
+        final tag = await Haudiotagger.read(path);
+        if (tag != null) {
+          if (tag.title != null && tag.title!.trim().isNotEmpty) {
+            title = tag.title!;
+          }
+          if (tag.trackArtist != null && tag.trackArtist!.trim().isNotEmpty) {
+            artist = tag.trackArtist!;
+          }
         }
-        if (tag.trackArtist != null && tag.trackArtist!.trim().isNotEmpty) {
-          artist = tag.trackArtist!;
-        }
+      } catch (e) {
+        //
       }
-    } catch (e) {
-      print('there is no data');
-    }
 
-    emit(state.copyWith(title: title, artist: artist));
+      await audioHandler.updateCurrentTrackInfo(title, artist);
+
+      emit(state.copyWith(title: title, artist: artist));
+    }
   }
-}
 
   void playPause() {
     if (state.isPlaying) {
