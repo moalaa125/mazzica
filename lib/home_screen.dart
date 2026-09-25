@@ -89,7 +89,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildPickFileButton() {
     return CustomButtons(
-      buttonIcon: CupertinoIcons.music_note_list,
+      buttonIcon: CupertinoIcons.folder_circle_fill,
       iconSize: 24.sp,
       buttonSize: 50.w,
       function: () => context.read<PlayerCubit>().pickAndPlayFile(),
@@ -235,13 +235,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Mazzica',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 30.sp,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Mazzica',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 30.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        _buildPickFileButton(),
+                      ],
                     ),
                     SizedBox(height: 15.h),
                     _buildGlowingCover(),
@@ -266,7 +272,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _buildPickFileButton(),
                             _buildFolderutton(),
                             _buildBackEndButton(),
                             _buildPlayPauseButton(),
