@@ -18,9 +18,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with TickerProviderStateMixin {
-  int _tab = 1; 
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  int _tab = 1;
   double? _dragValue;
 
   late final AnimationController _glowController;
@@ -46,12 +45,14 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildSeekBar() {
     return BlocBuilder<PlayerCubit, PlayerAppState>(
       builder: (context, state) {
-        final durationMs = state.duration.inMilliseconds
-            .toDouble()
-            .clamp(1.0, double.infinity);
-        final positionMs = state.position.inMilliseconds
-            .toDouble()
-            .clamp(0.0, durationMs);
+        final durationMs = state.duration.inMilliseconds.toDouble().clamp(
+          1.0,
+          double.infinity,
+        );
+        final positionMs = state.position.inMilliseconds.toDouble().clamp(
+          0.0,
+          durationMs,
+        );
         final progress =
             _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
 
@@ -83,6 +84,15 @@ class _HomeScreenState extends State<HomeScreen>
           buttonSize: 80.w,
         );
       },
+    );
+  }
+
+  Widget _buildPickFileButton() {
+    return CustomButtons(
+      buttonIcon: CupertinoIcons.music_note_list,
+      iconSize: 24.sp,
+      buttonSize: 50.w,
+      function: () => context.read<PlayerCubit>().pickAndPlayFile(),
     );
   }
 
@@ -205,7 +215,8 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     return BlocListener<PlayerCubit, PlayerAppState>(
-      listenWhen: (previous, current) => previous.isPlaying != current.isPlaying,
+      listenWhen: (previous, current) =>
+          previous.isPlaying != current.isPlaying,
       listener: (context, state) {
         if (state.isPlaying) {
           _glowController.repeat(reverse: true);
@@ -255,6 +266,7 @@ class _HomeScreenState extends State<HomeScreen>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
+                            _buildPickFileButton(),
                             _buildFolderutton(),
                             _buildBackEndButton(),
                             _buildPlayPauseButton(),
