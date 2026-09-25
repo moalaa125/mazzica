@@ -141,19 +141,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildTrackInfo() {
-    return Column(
-      children: [
-        Text('Kaptin-Black', style: GoogleFonts.rammettoOne(fontSize: 40)),
-        SizedBox(height: 2.h),
-        Shimmer.fromColors(
-          baseColor: AppColors.textSecondary,
-          highlightColor: AppColors.textPrimary,
-          child: Text(
-            'AFROTO',
-            style: GoogleFonts.abel(fontSize: 20, letterSpacing: 2),
-          ),
-        ),
-      ],
+    return BlocBuilder<PlayerCubit, PlayerAppState>(
+      builder: (context, state) {
+        return Column(
+          children: [
+            Text(
+              state.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.rammettoOne(fontSize: 40),
+            ),
+            SizedBox(height: 2.h),
+            Shimmer.fromColors(
+              baseColor: AppColors.textSecondary,
+              highlightColor: AppColors.textPrimary,
+              child: Text(
+                state.artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.abel(fontSize: 20, letterSpacing: 2),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
