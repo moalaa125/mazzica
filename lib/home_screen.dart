@@ -139,15 +139,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       onPressed: () {},
     );
   }
-
- Widget _buildTrackInfo() {
+  Widget _buildTrackInfo() {
   return BlocBuilder<PlayerCubit, PlayerAppState>(
     builder: (context, state) {
       return SizedBox(
-        width: 350.w, 
+        width: double.infinity,
         child: MarqueeText(
           text: state.title,
-          style: GoogleFonts.rammettoOne(fontSize: 40),
+          style: GoogleFonts.rammettoOne(
+            fontSize: 40,
+          ),
         ),
       );
     },
