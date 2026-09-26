@@ -249,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                     SizedBox(height: 15.h),
                     _buildGlowingCover(),
-                    SizedBox(height: 25.h),
+                    SizedBox(height: 55.h),
                     Center(child: _buildTrackInfo()),
                     SizedBox(height: 50.h),
                     Padding(
