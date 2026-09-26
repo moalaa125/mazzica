@@ -6,9 +6,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:mazzica/custom_buttons.dart';
 import 'package:mazzica/cubits/player_cubit.dart';
 import 'package:mazzica/cubits/player_state.dart';
+import 'package:mazzica/widgets/marquee_text.dart';
 import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:lottie/lottie.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -140,33 +140,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildTrackInfo() {
-    return BlocBuilder<PlayerCubit, PlayerAppState>(
-      builder: (context, state) {
-        return Column(
-          children: [
-            Text(
-              state.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.rammettoOne(fontSize: 40),
-            ),
-            SizedBox(height: 2.h),
-            Shimmer.fromColors(
-              baseColor: AppColors.textSecondary,
-              highlightColor: AppColors.textPrimary,
-              child: Text(
-                state.artist,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.abel(fontSize: 20, letterSpacing: 2),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
+ Widget _buildTrackInfo() {
+  return BlocBuilder<PlayerCubit, PlayerAppState>(
+    builder: (context, state) {
+      return SizedBox(
+        width: 350.w, 
+        child: MarqueeText(
+          text: state.title,
+          style: GoogleFonts.rammettoOne(fontSize: 40),
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildGlowingCover() {
     return AnimatedBuilder(

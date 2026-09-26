@@ -42,26 +42,20 @@ class PlayerCubit extends Cubit<PlayerAppState> {
       await player.setFilePath(path);
       audioHandler.play();
 
-      String title = p.basenameWithoutExtension(path);
-      String artist = 'Unknown Artist';
+      String title = p.basenameWithoutExtension(path); 
 
       try {
         final tag = await Haudiotagger.read(path);
-        if (tag != null) {
-          if (tag.title != null && tag.title!.trim().isNotEmpty) {
-            title = tag.title!;
-          }
-          if (tag.trackArtist != null && tag.trackArtist!.trim().isNotEmpty) {
-            artist = tag.trackArtist!;
-          }
+        if (tag != null && tag.title != null && tag.title!.trim().isNotEmpty) {
+          title = tag.title!;
         }
       } catch (e) {
-        //
+        // 
       }
 
-      await audioHandler.updateCurrentTrackInfo(title, artist);
+      await audioHandler.updateCurrentTrackInfo(title);
 
-      emit(state.copyWith(title: title, artist: artist));
+      emit(state.copyWith(title: title));
     }
   }
 

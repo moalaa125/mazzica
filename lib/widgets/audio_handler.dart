@@ -11,13 +11,10 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _init();
   }
 
-    Future<void> updateCurrentTrackInfo(String title, String artist) async {
+Future<void> updateCurrentTrackInfo(String title) async {
   final currentItem = mediaItem.value;
   if (currentItem != null) {
-    mediaItem.add(currentItem.copyWith(
-      title: title,
-      artist: artist,
-    ));
+    mediaItem.add(currentItem.copyWith(title: title));
   }
 }
 
