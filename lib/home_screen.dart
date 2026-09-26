@@ -247,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         _buildPickFileButton(),
                       ],
                     ),
-                    SizedBox(height: 25.h),
+                    SizedBox(height: 40.h),
                     _buildGlowingCover(),
                     SizedBox(height: 100.h),
                     Center(child: _buildTrackInfo()),

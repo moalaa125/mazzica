@@ -166,7 +166,7 @@ class _MarqueeTextState extends State<MarqueeText>
           });
         }
 
-        final height = (widget.style.fontSize ?? 16) * 1.1;
+        final height = (widget.style.fontSize ?? 16) * 1.3;
 
         return SizedBox(
           width: double.infinity,
