@@ -38,7 +38,6 @@ Future<void> updateCurrentTrackInfo(String title) async {
         tag: MediaItem(
           id: 'kaptin-black-1',
           title: 'Captain Black',
-          artist: 'AFROTO',
           duration: null,
         ),
       ),
@@ -48,7 +47,6 @@ Future<void> updateCurrentTrackInfo(String title) async {
       MediaItem(
         id: 'kaptin-black-1',
         title: 'Captain Black',
-        artist: 'AFROTO',
         duration: duration,
       ),
     );
