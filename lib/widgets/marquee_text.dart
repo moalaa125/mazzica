@@ -16,6 +16,7 @@ class MarqueeText extends StatefulWidget {
   final TextStyle style;
 
   final double speed;
+
   final double spacing;
   final Duration startDelay;
   final Duration endPause;
@@ -165,7 +166,7 @@ class _MarqueeTextState extends State<MarqueeText>
           });
         }
 
-        final height = (widget.style.fontSize ?? 16) * 1.4;
+        final height = (widget.style.fontSize ?? 16) * 1.1;
 
         return SizedBox(
           width: double.infinity,

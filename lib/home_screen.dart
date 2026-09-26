@@ -249,9 +249,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                     SizedBox(height: 15.h),
                     _buildGlowingCover(),
-                    SizedBox(height: 55.h),
+                    SizedBox(height: 100.h),
                     Center(child: _buildTrackInfo()),
-                    SizedBox(height: 50.h),
+                    SizedBox(height: 40.h),
                     Padding(
                       padding: EdgeInsets.only(left: 20.w, right: 20.w),
                       child: _buildSeekBar(),
@@ -265,7 +265,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(height: 15.h),
+                      SizedBox(height: 10.h),
                       Center(
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
