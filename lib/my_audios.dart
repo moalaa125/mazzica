@@ -17,10 +17,7 @@ class MyAudios extends StatelessWidget {
       navigationBar: CupertinoNavigationBar(
         middle: Text(
           'Your Audios',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18.sp,
-          ),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 18.sp),
         ),
         backgroundColor: AppColors.surface.withValues(alpha: 0.8),
       ),
@@ -66,10 +63,7 @@ class MyAudios extends StatelessWidget {
             }
 
             return ListView.builder(
-              padding: EdgeInsets.symmetric(
-                horizontal: 16.w,
-                vertical: 12.h,
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
               itemCount: state.tracks.length,
               itemBuilder: (context, index) {
                 final track = state.tracks[index];
@@ -101,11 +95,7 @@ class _AudioTile extends StatelessWidget {
           color: AppColors.coral.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(
-          CupertinoIcons.delete,
-          color: AppColors.coral,
-          size: 24.sp,
-        ),
+        child: Icon(CupertinoIcons.delete, color: AppColors.coral, size: 24.sp),
       ),
       onDismissed: (_) {
         context.read<AudioLibraryCubit>().deleteTrack(track);
@@ -115,15 +105,12 @@ class _AudioTile extends StatelessWidget {
           final libCubit = context.read<AudioLibraryCubit>();
           final playerCubit = context.read<PlayerCubit>();
           final filePath = await libCubit.getFilePath(track.fileName);
+
           await playerCubit.playFromLibrary(filePath, track.title);
-          if (context.mounted) Navigator.pop(context);
         },
         child: Container(
           margin: EdgeInsets.only(bottom: 8.h),
-          padding: EdgeInsets.symmetric(
-            horizontal: 16.w,
-            vertical: 14.h,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(12),

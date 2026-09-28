@@ -15,10 +15,7 @@ import 'package:mazzica/widgets/wave.dart';
 class ExpandedPlayerView extends StatefulWidget {
   final VoidCallback onCollapse;
 
-  const ExpandedPlayerView({
-    super.key,
-    required this.onCollapse,
-  });
+  const ExpandedPlayerView({super.key, required this.onCollapse});
 
   @override
   State<ExpandedPlayerView> createState() => _ExpandedPlayerViewState();
@@ -52,13 +49,13 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
     return BlocBuilder<PlayerCubit, PlayerAppState>(
       builder: (context, state) {
         final durationMs = state.duration.inMilliseconds.toDouble().clamp(
-              1.0,
-              double.infinity,
-            );
+          1.0,
+          double.infinity,
+        );
         final positionMs = state.position.inMilliseconds.toDouble().clamp(
-              0.0,
-              durationMs,
-            );
+          0.0,
+          durationMs,
+        );
         final progress =
             _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
 
@@ -106,7 +103,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
     return CustomButtons(
       buttonIcon: CupertinoIcons.forward_end,
       iconSize: 24.sp,
-      function: () => context.read<PlayerCubit>().seekForward10(),
+      function: () => context.read<PlayerCubit>().playNext(),
       buttonSize: 50.w,
     );
   }
@@ -115,7 +112,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
     return CustomButtons(
       buttonIcon: CupertinoIcons.backward_end,
       iconSize: 24.sp,
-      function: () => context.read<PlayerCubit>().seekBackward10(),
+      function: () => context.read<PlayerCubit>().playPrevious(),
       buttonSize: 50.w,
     );
   }
@@ -150,13 +147,13 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
                 const MyAudios(),
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
-              return CupertinoPageTransition(
-                primaryRouteAnimation: animation,
-                secondaryRouteAnimation: secondaryAnimation,
-                linearTransition: false,
-                child: child,
-              );
-            },
+                  return CupertinoPageTransition(
+                    primaryRouteAnimation: animation,
+                    secondaryRouteAnimation: secondaryAnimation,
+                    linearTransition: false,
+                    child: child,
+                  );
+                },
           ),
         );
       },
