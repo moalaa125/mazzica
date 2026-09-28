@@ -46,7 +46,9 @@ class PlayerCubit extends Cubit<PlayerAppState> {
     });
 
     player.durationStream.listen((duration) {
-      emit(state.copyWith(duration: duration ?? Duration.zero));
+      if (duration != null && duration > Duration.zero) {
+        emit(state.copyWith(duration: duration));
+      }
     });
 
     _restoreLastPlayedTrack();
@@ -62,13 +64,17 @@ class PlayerCubit extends Cubit<PlayerAppState> {
           final tracks = await _storageService.loadTracks();
           _currentTrackIndex = tracks.indexWhere((t) => t.id == lastTrack.id);
 
+          emit(state.copyWith(
+            title: lastTrack.title,
+            position: Duration.zero,
+          ));
+
           await player.stop();
           final duration = await player.setFilePath(filePath);
           await audioHandler.updateCurrentTrackInfo(lastTrack.title, duration: duration);
-          emit(state.copyWith(
-            title: lastTrack.title,
-            duration: duration ?? Duration.zero,
-          ));
+          if (duration != null) {
+            emit(state.copyWith(duration: duration));
+          }
         }
       }
     } catch (_) {}
@@ -101,6 +107,11 @@ class PlayerCubit extends Cubit<PlayerAppState> {
           }
         } catch (_) {}
 
+        emit(state.copyWith(
+          title: title,
+          position: Duration.zero,
+        ));
+
         final savedTrack = await _libraryCubit.saveTrack(sourcePath: path, title: title);
 
         await player.stop();
@@ -123,6 +134,11 @@ class PlayerCubit extends Cubit<PlayerAppState> {
 
   Future<void> playFromLibrary(String filePath, String title) async {
     try {
+      emit(state.copyWith(
+        title: title,
+        position: Duration.zero,
+      ));
+
       final file = File(filePath);
       if (!await file.exists()) return;
 
