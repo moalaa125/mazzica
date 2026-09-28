@@ -70,4 +70,23 @@ class AudioStorageService {
     final jsonStr = json.encode(tracks.map((t) => t.toJson()).toList());
     await prefs.setString(_key, jsonStr);
   }
+    static const _lastTrackKey = 'last_played_track_id';
+
+  Future<void> saveLastPlayedTrackId(String trackId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastTrackKey, trackId);
+  }
+
+  Future<AudioTrack?> getLastPlayedTrack() async {
+    final prefs = await SharedPreferences.getInstance();
+    final trackId = prefs.getString(_lastTrackKey);
+    if (trackId == null) return null;
+
+    final tracks = await loadTracks();
+    try {
+      return tracks.firstWhere((t) => t.id == trackId);
+    } catch (_) {
+      return tracks.isNotEmpty ? tracks.first : null;
+    }
+  }
 }
