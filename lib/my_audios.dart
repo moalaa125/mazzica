@@ -16,7 +16,7 @@ class MyAudios extends StatelessWidget {
       backgroundColor: AppColors.bg,
       navigationBar: CupertinoNavigationBar(
         middle: Text(
-          'Saved audios',
+          'Your Audios',
           style: TextStyle(
             color: AppColors.textPrimary,
             fontSize: 18.sp,
