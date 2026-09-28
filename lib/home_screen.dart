@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
@@ -53,7 +52,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
     final effectiveBottomBarHeight = 90.h + bottomPadding;
@@ -61,14 +59,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return GlassScaffold(
       body: Stack(
         children: [
-          // 1. Current Active Tab Content
-          SafeArea(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: effectiveBottomBarHeight + 70.h),
-              child: _buildTabContent(),
-            ),
-          ),
+          // 1. Current Active Tab Content takes the FULL screen height so items scroll under glass
+          _buildTabContent(),
 
+          // 2. Production Sliding Player Overlay
           SlidingPlayerOverlay(bottomBarHeight: effectiveBottomBarHeight),
         ],
       ),

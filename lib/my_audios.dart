@@ -12,8 +12,11 @@ class MyAudios extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    final bottomInset = 90.h + 68.h + bottomPadding + 16.h;
+
     return CupertinoPageScaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: CupertinoColors.transparent,
       navigationBar: CupertinoNavigationBar(
         middle: Text(
           'Your Audios',
@@ -22,6 +25,7 @@ class MyAudios extends StatelessWidget {
         backgroundColor: AppColors.surface.withValues(alpha: 0.8),
       ),
       child: SafeArea(
+        bottom: false, 
         child: BlocBuilder<AudioLibraryCubit, AudioLibraryState>(
           builder: (context, state) {
             if (state.status == AudioLibraryStatus.loading &&
@@ -63,7 +67,8 @@ class MyAudios extends StatelessWidget {
             }
 
             return ListView.builder(
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, bottomInset),
               itemCount: state.tracks.length,
               itemBuilder: (context, index) {
                 final track = state.tracks[index];
