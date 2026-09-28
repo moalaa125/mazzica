@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:mazzica/cubits/audio_library_cubit.dart';
 import 'package:mazzica/main.dart';
-import 'package:mazzica/models/audio_track.dart';
 import 'package:mazzica/services/audio_storage_service.dart';
 import 'player_state.dart';
 import 'package:haudiotagger/haudiotagger.dart';
@@ -58,13 +57,18 @@ class PlayerCubit extends Cubit<PlayerAppState> {
       final lastTrack = await _storageService.getLastPlayedTrack();
       if (lastTrack != null) {
         final filePath = await _storageService.getFilePath(lastTrack.fileName);
-        if (await File(filePath).exists()) {
+        final file = File(filePath);
+        if (await file.exists()) {
           final tracks = await _storageService.loadTracks();
           _currentTrackIndex = tracks.indexWhere((t) => t.id == lastTrack.id);
 
-          await player.setFilePath(filePath);
-          await audioHandler.updateCurrentTrackInfo(lastTrack.title);
-          emit(state.copyWith(title: lastTrack.title));
+          await player.stop();
+          final duration = await player.setFilePath(filePath);
+          await audioHandler.updateCurrentTrackInfo(lastTrack.title, duration: duration);
+          emit(state.copyWith(
+            title: lastTrack.title,
+            duration: duration ?? Duration.zero,
+          ));
         }
       }
     } catch (_) {}
@@ -81,52 +85,64 @@ class PlayerCubit extends Cubit<PlayerAppState> {
   }
 
   Future<void> pickAndPlayFile() async {
-    final List<PlatformFile> files = await FilePicker.pickFiles(
-      type: FileType.audio,
-    );
+    try {
+      final List<PlatformFile> files = await FilePicker.pickFiles(
+        type: FileType.audio,
+      );
 
-    if (files.isNotEmpty && files.single.path != null) {
-      final path = files.single.path!;
+      if (files.isNotEmpty && files.single.path != null) {
+        final path = files.single.path!;
+        String title = p.basenameWithoutExtension(path);
 
-      await player.setFilePath(path);
-      audioHandler.play();
+        try {
+          final tag = await Haudiotagger.read(path);
+          if (tag != null && tag.title != null && tag.title!.trim().isNotEmpty) {
+            title = tag.title!;
+          }
+        } catch (_) {}
 
-      String title = p.basenameWithoutExtension(path);
+        final savedTrack = await _libraryCubit.saveTrack(sourcePath: path, title: title);
 
-      try {
-        final tag = await Haudiotagger.read(path);
-        if (tag != null && tag.title != null && tag.title!.trim().isNotEmpty) {
-          title = tag.title!;
+        await player.stop();
+        final duration = await player.setFilePath(path);
+        await audioHandler.updateCurrentTrackInfo(title, duration: duration);
+        await audioHandler.play();
+
+        emit(state.copyWith(
+          title: title,
+          duration: duration ?? Duration.zero,
+        ));
+
+        _currentTrackIndex = 0;
+        if (savedTrack != null) {
+          await _storageService.saveLastPlayedTrackId(savedTrack.id);
         }
-      } catch (e) {
-        // 
       }
-
-      await audioHandler.updateCurrentTrackInfo(title);
-      emit(state.copyWith(title: title));
-
-      await _libraryCubit.saveTrack(sourcePath: path, title: title);
-      _currentTrackIndex = 0;
-
-      final tracks = _libraryCubit.state.tracks;
-      if (tracks.isNotEmpty) {
-        await _storageService.saveLastPlayedTrackId(tracks.first.id);
-      }
-    }
+    } catch (_) {}
   }
 
   Future<void> playFromLibrary(String filePath, String title) async {
-    final tracks = _libraryCubit.state.tracks;
-    _currentTrackIndex = tracks.indexWhere((t) => t.title == title);
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return;
 
-    await player.setFilePath(filePath);
-    audioHandler.play();
-    await audioHandler.updateCurrentTrackInfo(title);
-    emit(state.copyWith(title: title));
+      final tracks = await _storageService.loadTracks();
+      _currentTrackIndex = tracks.indexWhere((t) => t.title == title);
 
-    if (_currentTrackIndex != -1) {
-      await _storageService.saveLastPlayedTrackId(tracks[_currentTrackIndex].id);
-    }
+      await player.stop();
+      final duration = await player.setFilePath(filePath);
+      await audioHandler.updateCurrentTrackInfo(title, duration: duration);
+      await audioHandler.play();
+
+      emit(state.copyWith(
+        title: title,
+        duration: duration ?? Duration.zero,
+      ));
+
+      if (_currentTrackIndex != -1) {
+        await _storageService.saveLastPlayedTrackId(tracks[_currentTrackIndex].id);
+      }
+    } catch (_) {}
   }
 
   Future<void> playNext() async {

@@ -27,7 +27,7 @@ class AudioLibraryCubit extends Cubit<AudioLibraryState> {
     }
   }
 
-  Future<void> saveTrack({
+  Future<AudioTrack?> saveTrack({
     required String sourcePath,
     required String title,
   }) async {
@@ -43,7 +43,10 @@ class AudioLibraryCubit extends Cubit<AudioLibraryState> {
 
       await _storageService.saveTrack(track);
       await loadTracks();
-    } catch (_) {}
+      return track;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> deleteTrack(AudioTrack track) async {

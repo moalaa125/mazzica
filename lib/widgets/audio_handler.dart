@@ -14,10 +14,21 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _init();
   }
 
-  Future<void> updateCurrentTrackInfo(String title) async {
+  Future<void> updateCurrentTrackInfo(String title, {Duration? duration}) async {
     final currentItem = mediaItem.value;
     if (currentItem != null) {
-      mediaItem.add(currentItem.copyWith(title: title));
+      mediaItem.add(currentItem.copyWith(
+        title: title,
+        duration: duration ?? currentItem.duration,
+      ));
+    } else {
+      mediaItem.add(
+        MediaItem(
+          id: 'current_track',
+          title: title,
+          duration: duration,
+        ),
+      );
     }
   }
 
@@ -33,25 +44,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         mediaItem.add(currentItem.copyWith(duration: duration));
       }
     });
-
-    final duration = await _player.setAudioSource(
-      AudioSource.asset(
-        'assets/music/AFROTO - CAPTAIN BLACK.mp3',
-        tag: const MediaItem(
-          id: 'kaptin-black-1',
-          title: 'Captain Black',
-          duration: null,
-        ),
-      ),
-    );
-
-    mediaItem.add(
-      MediaItem(
-        id: 'kaptin-black-1',
-        title: 'Captain Black',
-        duration: duration,
-      ),
-    );
   }
 
   void _broadcastState(PlaybackEvent event) {
