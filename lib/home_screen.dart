@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:mazzica/custom_buttons.dart';
 import 'package:mazzica/cubits/player_cubit.dart';
 import 'package:mazzica/cubits/player_state.dart';
+import 'package:mazzica/my_audios.dart';
 import 'package:mazzica/widgets/marquee_text.dart';
 import 'package:mazzica/widgets/wave.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -127,7 +128,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildFolderutton() {
+  Widget _buildMyAudiosButton() {
     return GlassIconButton(
       icon: Icon(
         CupertinoIcons.music_note_list,
@@ -136,24 +137,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       shape: GlassIconButtonShape.circle,
       size: 50.w,
-      onPressed: () {},
+      onPressed: () {
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const MyAudios(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  final inTween = Tween(
+                    begin: const Offset(1.0, 0.0),
+                    end: Offset.zero,
+                  ).chain(CurveTween(curve: Curves.easeInOut));
+
+                  return SlideTransition(
+                    position: animation.drive(inTween),
+                    child: child,
+                  );
+                },
+          ),
+        );
+      },
     );
   }
+
   Widget _buildTrackInfo() {
-  return BlocBuilder<PlayerCubit, PlayerAppState>(
-    builder: (context, state) {
-      return SizedBox(
-        width: double.infinity,
-        child: MarqueeText(
-          text: state.title,
-          style: GoogleFonts.rammettoOne(
-            fontSize: 40,
+    return BlocBuilder<PlayerCubit, PlayerAppState>(
+      builder: (context, state) {
+        return SizedBox(
+          width: double.infinity,
+          child: MarqueeText(
+            text: state.title,
+            style: GoogleFonts.rammettoOne(fontSize: 40),
           ),
-        ),
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
   Widget _buildGlowingCover() {
     return AnimatedBuilder(
@@ -250,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     SizedBox(height: 40.h),
                     _buildGlowingCover(),
                     SizedBox(height: 60.h),
-                    Center(child: _buildTrackInfo()),
+                    SizedBox(width: double.infinity, child: _buildTrackInfo()),
                     SizedBox(height: 40.h),
                     Padding(
                       padding: EdgeInsets.only(left: 20.w, right: 20.w),
@@ -266,11 +286,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(height: 10.h),
-                      Center(
+                      SizedBox(
+                        width: double.infinity,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _buildFolderutton(),
+                            _buildMyAudiosButton(),
                             _buildBackEndButton(),
                             _buildPlayPauseButton(),
                             _buildNextEndButton(),

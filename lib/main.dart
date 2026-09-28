@@ -3,9 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
+import 'package:mazzica/cubits/audio_library_cubit.dart';
 import 'package:mazzica/cubits/player_cubit.dart';
 import 'package:mazzica/home_screen.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:mazzica/services/audio_storage_service.dart';
 import 'package:mazzica/widgets/audio_handler.dart';
 
 late MyAudioHandler audioHandler;
@@ -54,13 +56,24 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final storageService = AudioStorageService();
+
     return ScreenUtilInit(
       designSize: const Size(412, 915),
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {
-        return BlocProvider(
-          create: (_) => PlayerCubit(),
+        return MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => AudioLibraryCubit(storageService),
+            ),
+            BlocProvider(
+              create: (context) => PlayerCubit(
+                context.read<AudioLibraryCubit>(),
+              ),
+            ),
+          ],
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
             title: 'Mazzica',

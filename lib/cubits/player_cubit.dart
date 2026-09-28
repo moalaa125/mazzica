@@ -1,12 +1,15 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:mazzica/cubits/audio_library_cubit.dart';
 import 'package:mazzica/main.dart';
 import 'player_state.dart';
 import 'package:haudiotagger/haudiotagger.dart';
 import 'package:path/path.dart' as p;
 
 class PlayerCubit extends Cubit<PlayerAppState> {
-  PlayerCubit() : super(const PlayerAppState()) {
+  final AudioLibraryCubit _libraryCubit;
+
+  PlayerCubit(this._libraryCubit) : super(const PlayerAppState()) {
     _init();
   }
 
@@ -42,7 +45,7 @@ class PlayerCubit extends Cubit<PlayerAppState> {
       await player.setFilePath(path);
       audioHandler.play();
 
-      String title = p.basenameWithoutExtension(path); 
+      String title = p.basenameWithoutExtension(path);
 
       try {
         final tag = await Haudiotagger.read(path);
@@ -50,13 +53,21 @@ class PlayerCubit extends Cubit<PlayerAppState> {
           title = tag.title!;
         }
       } catch (e) {
-        // 
+        //
       }
 
       await audioHandler.updateCurrentTrackInfo(title);
-
       emit(state.copyWith(title: title));
+
+      _libraryCubit.saveTrack(sourcePath: path, title: title);
     }
+  }
+
+  Future<void> playFromLibrary(String filePath, String title) async {
+    await player.setFilePath(filePath);
+    audioHandler.play();
+    await audioHandler.updateCurrentTrackInfo(title);
+    emit(state.copyWith(title: title));
   }
 
   void playPause() {
