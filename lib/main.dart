@@ -71,6 +71,7 @@ class MyApp extends StatelessWidget {
             BlocProvider(
               create: (context) => PlayerCubit(
                 context.read<AudioLibraryCubit>(),
+                storageService,
               ),
             ),
           ],
