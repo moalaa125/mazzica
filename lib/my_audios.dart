@@ -12,26 +12,35 @@ class MyAudios extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
-    final bottomInset = 90.h + 68.h + bottomPadding + 16.h;
+    final bottomPadding =
+        MediaQuery.of(context).viewPadding.bottom;
+
+    final bottomInset =
+        90.h + 68.h + bottomPadding + 16.h;
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.transparent,
       navigationBar: CupertinoNavigationBar(
         middle: Text(
           'Your Audios',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 18.sp),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18.sp,
+          ),
         ),
-        backgroundColor: AppColors.surface.withValues(alpha: 0.8),
+        backgroundColor:
+            AppColors.surface.withValues(alpha: 0.8),
       ),
       child: SafeArea(
-        bottom: false, 
+        bottom: false,
         child: BlocBuilder<AudioLibraryCubit, AudioLibraryState>(
           builder: (context, state) {
             if (state.status == AudioLibraryStatus.loading &&
                 state.tracks.isEmpty) {
               return const Center(
-                child: CupertinoActivityIndicator(color: AppColors.lime),
+                child: CupertinoActivityIndicator(
+                  color: AppColors.lime,
+                ),
               );
             }
 
@@ -57,7 +66,8 @@ class MyAudios extends StatelessWidget {
                     Text(
                       'choose a song from the files and it will be saved here',
                       style: TextStyle(
-                        color: AppColors.textSecondary.withValues(alpha: 0.6),
+                        color: AppColors.textSecondary
+                            .withValues(alpha: 0.6),
                         fontSize: 14.sp,
                       ),
                     ),
@@ -68,11 +78,19 @@ class MyAudios extends StatelessWidget {
 
             return ListView.builder(
               physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, bottomInset),
+              padding: EdgeInsets.fromLTRB(
+                16.w,
+                12.h,
+                16.w,
+                bottomInset,
+              ),
               itemCount: state.tracks.length,
               itemBuilder: (context, index) {
                 final track = state.tracks[index];
-                return _AudioTile(track: track);
+
+                return _AudioTile(
+                  track: track,
+                );
               },
             );
           },
@@ -83,7 +101,9 @@ class MyAudios extends StatelessWidget {
 }
 
 class _AudioTile extends StatelessWidget {
-  const _AudioTile({required this.track});
+  const _AudioTile({
+    required this.track,
+  });
 
   final AudioTrack track;
 
@@ -92,45 +112,63 @@ class _AudioTile extends StatelessWidget {
     return Dismissible(
       key: ValueKey(track.id),
       direction: DismissDirection.endToStart,
+
       background: Container(
         alignment: Alignment.centerRight,
         padding: EdgeInsets.only(right: 20.w),
         margin: EdgeInsets.only(bottom: 8.h),
         decoration: BoxDecoration(
-          color: AppColors.coral.withValues(alpha: 0.3),
+          color:
+              AppColors.coral.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(CupertinoIcons.delete, color: AppColors.coral, size: 24.sp),
+        child: Icon(
+          CupertinoIcons.delete,
+          color: AppColors.coral,
+          size: 24.sp,
+        ),
       ),
+
       onDismissed: (_) {
-        context.read<AudioLibraryCubit>().deleteTrack(track);
+        context
+            .read<PlayerCubit>()
+            .deleteTrack(track);
       },
+
       child: GestureDetector(
         onTap: () async {
-          final libCubit = context.read<AudioLibraryCubit>();
-          final playerCubit = context.read<PlayerCubit>();
-          final filePath = await libCubit.getFilePath(track.fileName);
-
-          await playerCubit.playFromLibrary(filePath, track.title);
+          // Pass the complete AudioTrack so PlayerCubit
+          // can use the stable track ID.
+          await context
+              .read<PlayerCubit>()
+              .playTrack(track);
         },
+
         child: Container(
           margin: EdgeInsets.only(bottom: 8.h),
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+          padding: EdgeInsets.symmetric(
+            horizontal: 16.w,
+            vertical: 14.h,
+          ),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: AppColors.textSecondary.withValues(alpha: 0.1),
+              color: AppColors.textSecondary
+                  .withValues(alpha: 0.1),
             ),
           ),
+
           child: Row(
             children: [
               Container(
                 width: 44.w,
                 height: 44.w,
                 decoration: BoxDecoration(
-                  color: AppColors.lime.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppColors.lime
+                      .withValues(alpha: 0.15),
+                  borderRadius:
+                      BorderRadius.circular(10),
                 ),
                 child: Icon(
                   CupertinoIcons.play_fill,
@@ -138,32 +176,42 @@ class _AudioTile extends StatelessWidget {
                   size: 20.sp,
                 ),
               ),
+
               SizedBox(width: 12.w),
+
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
                       track.title,
                       style: TextStyle(
-                        color: AppColors.textPrimary,
+                        color:
+                            AppColors.textPrimary,
                         fontSize: 16.sp,
-                        fontWeight: FontWeight.w600,
+                        fontWeight:
+                            FontWeight.w600,
                       ),
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      overflow:
+                          TextOverflow.ellipsis,
                     ),
+
                     SizedBox(height: 4.h),
+
                     Text(
                       '${track.addedAt.day}/${track.addedAt.month}/${track.addedAt.year}',
                       style: TextStyle(
-                        color: AppColors.textSecondary,
+                        color:
+                            AppColors.textSecondary,
                         fontSize: 12.sp,
                       ),
                     ),
                   ],
                 ),
               ),
+
               Icon(
                 CupertinoIcons.chevron_right,
                 color: AppColors.textSecondary,

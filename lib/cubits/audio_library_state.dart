@@ -13,15 +13,19 @@ class AudioLibraryState {
     this.errorMessage,
   });
 
+  static const Object _noChange = Object();
+
   AudioLibraryState copyWith({
     AudioLibraryStatus? status,
     List<AudioTrack>? tracks,
-    String? errorMessage,
+    Object? errorMessage = _noChange,
   }) {
     return AudioLibraryState(
       status: status ?? this.status,
       tracks: tracks ?? this.tracks,
-      errorMessage: errorMessage ?? this.errorMessage,
+      errorMessage: identical(errorMessage, _noChange)
+          ? this.errorMessage
+          : errorMessage as String?,
     );
   }
 }

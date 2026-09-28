@@ -1,25 +1,39 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mazzica/models/audio_track.dart';
 import 'package:mazzica/services/audio_storage_service.dart';
+
 import 'audio_library_state.dart';
 
 class AudioLibraryCubit extends Cubit<AudioLibraryState> {
   final AudioStorageService _storageService;
 
-  AudioLibraryCubit(this._storageService)
-      : super(const AudioLibraryState()) {
+  int _loadGeneration = 0;
+
+  AudioLibraryCubit(this._storageService) : super(const AudioLibraryState()) {
     loadTracks();
   }
 
   Future<void> loadTracks() async {
-    emit(state.copyWith(status: AudioLibraryStatus.loading));
+    final generation = ++_loadGeneration;
+
+    emit(state.copyWith(
+      status: AudioLibraryStatus.loading,
+      errorMessage: null,
+    ));
+
     try {
       final tracks = await _storageService.loadTracks();
+
+      if (isClosed || generation != _loadGeneration) return;
+
       emit(state.copyWith(
         status: AudioLibraryStatus.loaded,
         tracks: tracks,
+        errorMessage: null,
       ));
     } catch (e) {
+      if (isClosed || generation != _loadGeneration) return;
+
       emit(state.copyWith(
         status: AudioLibraryStatus.error,
         errorMessage: e.toString(),
@@ -31,21 +45,42 @@ class AudioLibraryCubit extends Cubit<AudioLibraryState> {
     required String sourcePath,
     required String title,
   }) async {
-    try {
-      final fileName = await _storageService.copyToAppDir(sourcePath);
+    String? copiedFileName;
 
+    try {
+      copiedFileName = await _storageService.copyToAppDir(sourcePath);
+
+      final now = DateTime.now();
       final track = AudioTrack(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: title,
-        fileName: fileName,
-        addedAt: DateTime.now(),
+        id: '${now.microsecondsSinceEpoch}',
+        title: title.trim().isEmpty ? 'Unknown track' : title.trim(),
+        fileName: copiedFileName,
+        addedAt: now,
       );
 
       await _storageService.saveTrack(track);
       await loadTracks();
+
       return track;
-    } catch (_) {
-      return null;
+    } catch (e) {
+      // If metadata persistence fails after the physical copy succeeded,
+      // remove the orphaned imported file.
+      if (copiedFileName != null) {
+        try {
+          await _storageService.deleteStoredFile(copiedFileName);
+        } catch (_) {
+          // Preserve the original error; cleanup failure is secondary.
+        }
+      }
+
+      if (!isClosed) {
+        emit(state.copyWith(
+          status: AudioLibraryStatus.error,
+          errorMessage: e.toString(),
+        ));
+      }
+
+      rethrow;
     }
   }
 
@@ -54,10 +89,13 @@ class AudioLibraryCubit extends Cubit<AudioLibraryState> {
       await _storageService.deleteTrack(track);
       await loadTracks();
     } catch (e) {
-      emit(state.copyWith(
-        status: AudioLibraryStatus.error,
-        errorMessage: e.toString(),
-      ));
+      if (!isClosed) {
+        emit(state.copyWith(
+          status: AudioLibraryStatus.error,
+          errorMessage: e.toString(),
+        ));
+      }
+      rethrow;
     }
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
@@ -5,54 +7,68 @@ import 'package:just_audio/just_audio.dart';
 class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
 
+  late final Future<void> ready;
+
+  StreamSubscription<PlaybackEvent>? _playbackSubscription;
+
   AudioPlayer get player => _player;
 
   Future<void> Function()? onSkipToNext;
   Future<void> Function()? onSkipToPrevious;
 
   MyAudioHandler() {
-    _init();
+    ready = _init();
   }
 
-  Future<void> updateCurrentTrackInfo(String title, {Duration? duration}) async {
-    final currentItem = mediaItem.value;
-    if (currentItem != null) {
-      mediaItem.add(currentItem.copyWith(
+  Future<void> updateCurrentTrackInfo(
+    String trackId,
+    String title, {
+    Duration? duration,
+  }) async {
+    await ready;
+
+    mediaItem.add(
+      MediaItem(
+        id: trackId,
         title: title,
-        duration: duration ?? currentItem.duration,
-      ));
-    } else {
-      mediaItem.add(
-        MediaItem(
-          id: 'current_track',
-          title: title,
-          duration: duration,
-        ),
-      );
-    }
+        duration: duration,
+      ),
+    );
+  }
+
+  Future<void> clearCurrentTrack() async {
+    await ready;
+    mediaItem.add(null);
+    await _player.stop();
   }
 
   Future<void> _init() async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
 
-    _player.playbackEventStream.listen(_broadcastState);
-
-    _player.durationStream.listen((duration) {
-      final currentItem = mediaItem.value;
-      if (currentItem != null && duration != null) {
-        mediaItem.add(currentItem.copyWith(duration: duration));
-      }
-    });
+    _playbackSubscription = _player.playbackEventStream.listen(
+      _broadcastState,
+    );
   }
 
   void _broadcastState(PlaybackEvent event) {
-    final playing = _player.playing;
+    final processingState = const {
+      ProcessingState.idle: AudioProcessingState.idle,
+      ProcessingState.loading: AudioProcessingState.loading,
+      ProcessingState.buffering: AudioProcessingState.buffering,
+      ProcessingState.ready: AudioProcessingState.ready,
+      ProcessingState.completed: AudioProcessingState.completed,
+    }[_player.processingState];
+
+    if (processingState == null) {
+      return;
+    }
+
     playbackState.add(
       playbackState.value.copyWith(
         controls: [
           MediaControl.skipToPrevious,
-          if (playing) MediaControl.pause else MediaControl.play,
+          if (_player.playing) MediaControl.pause else MediaControl.play,
           MediaControl.stop,
           MediaControl.skipToNext,
         ],
@@ -62,48 +78,65 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
           MediaAction.seekBackward,
         },
         androidCompactActionIndices: const [0, 1, 3],
-        processingState: const {
-          ProcessingState.idle: AudioProcessingState.idle,
-          ProcessingState.loading: AudioProcessingState.loading,
-          ProcessingState.buffering: AudioProcessingState.buffering,
-          ProcessingState.ready: AudioProcessingState.ready,
-          ProcessingState.completed: AudioProcessingState.completed,
-        }[_player.processingState]!,
-        playing: playing,
+        processingState: processingState,
+        playing: _player.playing,
         updatePosition: _player.position,
         bufferedPosition: _player.bufferedPosition,
         speed: _player.speed,
-        queueIndex: event.currentIndex,
       ),
     );
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    await ready;
+    await _player.play();
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    await ready;
+    await _player.pause();
+  }
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) async {
+    await ready;
+    await _player.seek(position);
+  }
 
   @override
   Future<void> stop() async {
+    await ready;
     await _player.stop();
-    return super.stop();
+    await super.stop();
   }
 
   @override
   Future<void> skipToNext() async {
-    if (onSkipToNext != null) {
-      await onSkipToNext!();
+    await ready;
+    final callback = onSkipToNext;
+    if (callback != null) {
+      await callback();
     }
   }
 
   @override
   Future<void> skipToPrevious() async {
-    if (onSkipToPrevious != null) {
-      await onSkipToPrevious!();
+    await ready;
+    final callback = onSkipToPrevious;
+    if (callback != null) {
+      await callback();
     }
+  }
+
+  @override
+  Future<void> onTaskRemoved() async {
+    await stop();
+  }
+
+  Future<void> dispose() async {
+    await _playbackSubscription?.cancel();
+    await _player.dispose();
   }
 }

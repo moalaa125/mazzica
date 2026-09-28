@@ -21,15 +21,16 @@ class MiniPlayerBar extends StatelessWidget {
         height: 64.h,
         margin: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
         child: GlassContainer(
-          // borderRadius: BorderRadius.circular(16.r),
           glowIntensity: 0.15,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12.w),
             child: BlocBuilder<PlayerCubit, PlayerAppState>(
+              buildWhen: (previous, current) =>
+                  previous.title != current.title ||
+                  previous.isPlaying != current.isPlaying,
               builder: (context, state) {
                 return Row(
                   children: [
-                    // Mini Album Art
                     Container(
                       width: 44.w,
                       height: 44.w,
@@ -48,7 +49,6 @@ class MiniPlayerBar extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: 12.w),
-                    // Track Title & Status
                     Expanded(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -56,7 +56,7 @@ class MiniPlayerBar extends StatelessWidget {
                         children: [
                           Text(
                             state.title,
-                            key: ValueKey(state.title),
+                            key: ValueKey(state.currentTrackId ?? state.title),
                             style: TextStyle(
                               color: AppColors.textPrimary,
                               fontSize: 14.sp,
@@ -76,7 +76,6 @@ class MiniPlayerBar extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // 1. Previous Track Button (Backward End)
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       onPressed: () =>
@@ -88,10 +87,10 @@ class MiniPlayerBar extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: 4.w),
-                    // 2. Play / Pause Button
                     CupertinoButton(
                       padding: EdgeInsets.zero,
-                      onPressed: () => context.read<PlayerCubit>().playPause(),
+                      onPressed: () =>
+                          context.read<PlayerCubit>().playPause(),
                       child: Container(
                         padding: EdgeInsets.all(8.w),
                         decoration: BoxDecoration(
@@ -108,7 +107,6 @@ class MiniPlayerBar extends StatelessWidget {
                       ),
                     ),
                     SizedBox(width: 4.w),
-                    // 3. Next Track Button (Forward End)
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       onPressed: () => context.read<PlayerCubit>().playNext(),

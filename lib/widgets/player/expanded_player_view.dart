@@ -79,6 +79,8 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
 
   Widget _buildPlayPauseButton() {
     return BlocBuilder<PlayerCubit, PlayerAppState>(
+      buildWhen: (previous, current) =>
+          previous.isPlaying != current.isPlaying,
       builder: (context, state) {
         return CustomButtons(
           buttonIcon: state.isPlaying
