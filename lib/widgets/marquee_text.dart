@@ -40,9 +40,7 @@ class _MarqueeTextState extends State<MarqueeText>
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
-      vsync: this,
-    );
+    _controller = AnimationController(vsync: this);
   }
 
   @override
@@ -53,7 +51,17 @@ class _MarqueeTextState extends State<MarqueeText>
         oldWidget.style != widget.style ||
         oldWidget.speed != widget.speed ||
         oldWidget.spacing != widget.spacing) {
-      _measureAndStart();
+      _controller.stop();
+      _controller.reset();
+      _animationVersion++;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _measureAndStart();
+          });
+        }
+      });
     }
   }
 
@@ -61,10 +69,7 @@ class _MarqueeTextState extends State<MarqueeText>
     if (!mounted) return;
 
     final painter = TextPainter(
-      text: TextSpan(
-        text: widget.text,
-        style: widget.style,
-      ),
+      text: TextSpan(text: widget.text, style: widget.style),
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout();
@@ -104,28 +109,20 @@ class _MarqueeTextState extends State<MarqueeText>
   Future<void> _startAnimation(int version) async {
     await Future.delayed(widget.startDelay);
 
-    if (!mounted ||
-        version != _animationVersion ||
-        !_shouldScroll) {
+    if (!mounted || version != _animationVersion || !_shouldScroll) {
       return;
     }
 
-    while (mounted &&
-        version == _animationVersion &&
-        _shouldScroll) {
+    while (mounted && version == _animationVersion && _shouldScroll) {
       await _controller.forward();
 
-      if (!mounted ||
-          version != _animationVersion ||
-          !_shouldScroll) {
+      if (!mounted || version != _animationVersion || !_shouldScroll) {
         return;
       }
 
       await Future.delayed(widget.endPause);
 
-      if (!mounted ||
-          version != _animationVersion ||
-          !_shouldScroll) {
+      if (!mounted || version != _animationVersion || !_shouldScroll) {
         return;
       }
 
@@ -133,9 +130,7 @@ class _MarqueeTextState extends State<MarqueeText>
 
       await Future.delayed(widget.startDelay);
 
-      if (!mounted ||
-          version != _animationVersion ||
-          !_shouldScroll) {
+      if (!mounted || version != _animationVersion || !_shouldScroll) {
         return;
       }
     }
@@ -172,9 +167,7 @@ class _MarqueeTextState extends State<MarqueeText>
           width: double.infinity,
           height: height,
           child: ClipRect(
-            child: _shouldScroll
-                ? _buildScrollingText()
-                : _buildStaticText(),
+            child: _shouldScroll ? _buildScrollingText() : _buildStaticText(),
           ),
         );
       },
@@ -198,18 +191,12 @@ class _MarqueeTextState extends State<MarqueeText>
 
     return ShaderMask(
       shaderCallback: (bounds) {
-        final fade = (widget.fadeWidth / bounds.width)
-            .clamp(0.0, 0.45);
+        final fade = (widget.fadeWidth / bounds.width).clamp(0.0, 0.45);
 
         return LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          stops: [
-            0,
-            fade,
-            1 - fade,
-            1,
-          ],
+          stops: [0, fade, 1 - fade, 1],
           colors: const [
             Colors.transparent,
             Colors.white,
@@ -229,10 +216,7 @@ class _MarqueeTextState extends State<MarqueeText>
               alignment: Alignment.centerLeft,
               minWidth: 0,
               maxWidth: double.infinity,
-              child: Transform.translate(
-                offset: Offset(dx, 0),
-                child: child,
-              ),
+              child: Transform.translate(offset: Offset(dx, 0), child: child),
             ),
           );
         },
@@ -245,21 +229,11 @@ class _MarqueeTextState extends State<MarqueeText>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          widget.text,
-          style: widget.style,
-          maxLines: 1,
-        ),
+        Text(widget.text, style: widget.style, maxLines: 1),
 
-        SizedBox(
-          width: widget.spacing,
-        ),
+        SizedBox(width: widget.spacing),
 
-        Text(
-          widget.text,
-          style: widget.style,
-          maxLines: 1,
-        ),
+        Text(widget.text, style: widget.style, maxLines: 1),
       ],
     );
   }

@@ -10,10 +10,7 @@ import 'package:mazzica/cubits/player_state.dart';
 class MiniPlayerBar extends StatelessWidget {
   final VoidCallback onTap;
 
-  const MiniPlayerBar({
-    super.key,
-    required this.onTap,
-  });
+  const MiniPlayerBar({super.key, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +56,7 @@ class MiniPlayerBar extends StatelessWidget {
                         children: [
                           Text(
                             state.title,
+                            key: ValueKey(state.title),
                             style: TextStyle(
                               color: AppColors.textPrimary,
                               fontSize: 14.sp,
@@ -93,8 +91,7 @@ class MiniPlayerBar extends StatelessWidget {
                     // 2. Play / Pause Button
                     CupertinoButton(
                       padding: EdgeInsets.zero,
-                      onPressed: () =>
-                          context.read<PlayerCubit>().playPause(),
+                      onPressed: () => context.read<PlayerCubit>().playPause(),
                       child: Container(
                         padding: EdgeInsets.all(8.w),
                         decoration: BoxDecoration(
@@ -114,8 +111,7 @@ class MiniPlayerBar extends StatelessWidget {
                     // 3. Next Track Button (Forward End)
                     CupertinoButton(
                       padding: EdgeInsets.zero,
-                      onPressed: () =>
-                          context.read<PlayerCubit>().playNext(),
+                      onPressed: () => context.read<PlayerCubit>().playNext(),
                       child: Icon(
                         CupertinoIcons.forward_end_fill,
                         color: AppColors.lime,

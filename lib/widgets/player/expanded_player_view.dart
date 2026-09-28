@@ -147,10 +147,12 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
 
   Widget _buildTrackInfo() {
     return BlocBuilder<PlayerCubit, PlayerAppState>(
+      buildWhen: (previous, current) => previous.title != current.title,
       builder: (context, state) {
         return SizedBox(
           width: double.infinity,
           child: MarqueeText(
+            key: ValueKey(state.title), 
             text: state.title,
             style: GoogleFonts.rammettoOne(fontSize: 40),
           ),
@@ -158,7 +160,6 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
       },
     );
   }
-
   Widget _buildGlowingCover() {
     return AnimatedBuilder(
       animation: _glowAnimation,
