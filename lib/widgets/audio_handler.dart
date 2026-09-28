@@ -7,17 +7,19 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   AudioPlayer get player => _player;
 
+  Future<void> Function()? onSkipToNext;
+  Future<void> Function()? onSkipToPrevious;
+
   MyAudioHandler() {
     _init();
   }
 
-Future<void> updateCurrentTrackInfo(String title) async {
-  final currentItem = mediaItem.value;
-  if (currentItem != null) {
-    mediaItem.add(currentItem.copyWith(title: title));
+  Future<void> updateCurrentTrackInfo(String title) async {
+    final currentItem = mediaItem.value;
+    if (currentItem != null) {
+      mediaItem.add(currentItem.copyWith(title: title));
+    }
   }
-}
-
 
   Future<void> _init() async {
     final session = await AudioSession.instance;
@@ -35,7 +37,7 @@ Future<void> updateCurrentTrackInfo(String title) async {
     final duration = await _player.setAudioSource(
       AudioSource.asset(
         'assets/music/AFROTO - CAPTAIN BLACK.mp3',
-        tag: MediaItem(
+        tag: const MediaItem(
           id: 'kaptin-black-1',
           title: 'Captain Black',
           duration: null,
@@ -97,5 +99,19 @@ Future<void> updateCurrentTrackInfo(String title) async {
   Future<void> stop() async {
     await _player.stop();
     return super.stop();
+  }
+
+  @override
+  Future<void> skipToNext() async {
+    if (onSkipToNext != null) {
+      await onSkipToNext!();
+    }
+  }
+
+  @override
+  Future<void> skipToPrevious() async {
+    if (onSkipToPrevious != null) {
+      await onSkipToPrevious!();
+    }
   }
 }

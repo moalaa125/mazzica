@@ -24,6 +24,7 @@ class MiniPlayerBar extends StatelessWidget {
         height: 64.h,
         margin: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
         child: GlassContainer(
+          // borderRadius: BorderRadius.circular(16.r),
           glowIntensity: 0.15,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12.w),
@@ -77,18 +78,19 @@ class MiniPlayerBar extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // Quick Controls
+                    // 1. Previous Track Button (Backward End)
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       onPressed: () =>
-                          context.read<PlayerCubit>().seekBackward10(),
+                          context.read<PlayerCubit>().playPrevious(),
                       child: Icon(
-                        CupertinoIcons.gobackward_10,
-                        color: AppColors.textSecondary,
-                        size: 22.sp,
+                        CupertinoIcons.backward_end_fill,
+                        color: AppColors.lime,
+                        size: 20.sp,
                       ),
                     ),
-                    SizedBox(width: 8.w),
+                    SizedBox(width: 4.w),
+                    // 2. Play / Pause Button
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       onPressed: () =>
@@ -106,6 +108,18 @@ class MiniPlayerBar extends StatelessWidget {
                           color: AppColors.lime,
                           size: 20.sp,
                         ),
+                      ),
+                    ),
+                    SizedBox(width: 4.w),
+                    // 3. Next Track Button (Forward End)
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: () =>
+                          context.read<PlayerCubit>().playNext(),
+                      child: Icon(
+                        CupertinoIcons.forward_end_fill,
+                        color: AppColors.lime,
+                        size: 20.sp,
                       ),
                     ),
                   ],

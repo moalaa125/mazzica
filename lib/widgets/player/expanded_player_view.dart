@@ -8,14 +8,16 @@ import 'package:mazzica/constants/app_color.dart';
 import 'package:mazzica/cubits/player_cubit.dart';
 import 'package:mazzica/cubits/player_state.dart';
 import 'package:mazzica/custom_buttons.dart';
-import 'package:mazzica/my_audios.dart';
 import 'package:mazzica/widgets/marquee_text.dart';
 import 'package:mazzica/widgets/wave.dart';
 
 class ExpandedPlayerView extends StatefulWidget {
   final VoidCallback onCollapse;
 
-  const ExpandedPlayerView({super.key, required this.onCollapse});
+  const ExpandedPlayerView({
+    super.key,
+    required this.onCollapse,
+  });
 
   @override
   State<ExpandedPlayerView> createState() => _ExpandedPlayerViewState();
@@ -49,13 +51,13 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
     return BlocBuilder<PlayerCubit, PlayerAppState>(
       builder: (context, state) {
         final durationMs = state.duration.inMilliseconds.toDouble().clamp(
-          1.0,
-          double.infinity,
-        );
+              1.0,
+              double.infinity,
+            );
         final positionMs = state.position.inMilliseconds.toDouble().clamp(
-          0.0,
-          durationMs,
-        );
+              0.0,
+              durationMs,
+            );
         final progress =
             _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
 
@@ -139,24 +141,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
       ),
       shape: GlassIconButtonShape.circle,
       size: 50.w,
-      onPressed: () {
-        Navigator.push(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const MyAudios(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-                  return CupertinoPageTransition(
-                    primaryRouteAnimation: animation,
-                    secondaryRouteAnimation: secondaryAnimation,
-                    linearTransition: false,
-                    child: child,
-                  );
-                },
-          ),
-        );
-      },
+      onPressed: widget.onCollapse,
     );
   }
 
@@ -254,28 +239,13 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          GlassIconButton(
-                            icon: Icon(
-                              CupertinoIcons.chevron_down,
-                              color: AppColors.textPrimary,
-                              size: 22.sp,
-                            ),
-                            shape: GlassIconButtonShape.circle,
-                            size: 44.w,
-                            onPressed: widget.onCollapse,
-                          ),
-                          SizedBox(width: 8.w),
-                          Text(
-                            'Mazzica',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 30.sp,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        'Mazzica',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 30.sp,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       _buildPickFileButton(),
                     ],

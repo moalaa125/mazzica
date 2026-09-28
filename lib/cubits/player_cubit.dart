@@ -17,7 +17,10 @@ class PlayerCubit extends Cubit<PlayerAppState> {
 
   get player => audioHandler.player;
 
-  void _init() {
+    void _init() {
+    audioHandler.onSkipToNext = () => playNext();
+    audioHandler.onSkipToPrevious = () => playPrevious();
+
     player.playerStateStream.listen((playerState) {
       final isCompleted = playerState.processingState == ProcessingState.completed;
       
