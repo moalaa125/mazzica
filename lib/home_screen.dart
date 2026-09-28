@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
+import 'package:mazzica/my_audios.dart';
 import 'package:mazzica/widgets/player/sliding_player_overlay.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,9 +19,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTabContent() {
     switch (_tab) {
       case 0:
-        return _buildPlaceholder('Explore & New Releases', CupertinoIcons.compass);
+        return _buildPlaceholder(
+          'Explore & New Releases',
+          CupertinoIcons.compass,
+        );
       case 1:
-        return _buildPlaceholder('My Music & Playlists', CupertinoIcons.music_note_2);
+        return const MyAudios();
       case 2:
         return _buildPlaceholder('Local Files', CupertinoIcons.folder);
       default:
@@ -50,57 +54,56 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   @override
-Widget build(BuildContext context) {
-  // حساب ارتفاع التاب بار مع مساحة الحافة السفلية للجهاز
-  final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
-  final effectiveBottomBarHeight = 90.h + bottomPadding;
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    final effectiveBottomBarHeight = 90.h + bottomPadding;
 
-  return GlassScaffold(
-    body: Stack(
-      children: [
-        // 1. Current Active Tab Content
-        SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(bottom: effectiveBottomBarHeight + 70.h),
-            child: _buildTabContent(),
+    return GlassScaffold(
+      body: Stack(
+        children: [
+          // 1. Current Active Tab Content
+          SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: effectiveBottomBarHeight + 70.h),
+              child: _buildTabContent(),
+            ),
+          ),
+
+          SlidingPlayerOverlay(bottomBarHeight: effectiveBottomBarHeight),
+        ],
+      ),
+      background: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.bg, AppColors.surface],
+            stops: [0.6, 1.0],
           ),
         ),
-
-        // 2. Production Sliding Player Overlay
-        SlidingPlayerOverlay(bottomBarHeight: effectiveBottomBarHeight),
-      ],
-    ),
-    background: Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.bg, AppColors.surface],
-          stops: [0.6, 1.0],
-        ),
       ),
-    ),
-    backgroundColor: AppColors.bg,
-    bottomBar: GlassTabBar.bottom(
-      selectedIconColor: AppColors.lime,
-      indicatorColor: AppColors.lime.withValues(alpha: 0.18),
-      onTabSelected: (i) => setState(() => _tab = i),
-      tabs: [
-        GlassTab(
-          icon: Icon(CupertinoIcons.compass, size: 24.sp),
-          label: 'Explore',
-        ),
-        GlassTab(
-          icon: Icon(CupertinoIcons.music_note_2, size: 24.sp),
-          label: 'Music',
-        ),
-        GlassTab(
-          icon: Icon(CupertinoIcons.folder, size: 24.sp),
-          label: 'Files',
-        ),
-      ],
-      selectedIndex: _tab,
-    ),
-    statusBarStyle: GlassStatusBarStyle.auto,
-  );
-}}
+      backgroundColor: AppColors.bg,
+      bottomBar: GlassTabBar.bottom(
+        selectedIconColor: AppColors.lime,
+        indicatorColor: AppColors.lime.withValues(alpha: 0.18),
+        onTabSelected: (i) => setState(() => _tab = i),
+        tabs: [
+          GlassTab(
+            icon: Icon(CupertinoIcons.compass, size: 24.sp),
+            label: 'Explore',
+          ),
+          GlassTab(
+            icon: Icon(CupertinoIcons.music_note_2, size: 24.sp),
+            label: 'Music',
+          ),
+          GlassTab(
+            icon: Icon(CupertinoIcons.folder, size: 24.sp),
+            label: 'Files',
+          ),
+        ],
+        selectedIndex: _tab,
+      ),
+      statusBarStyle: GlassStatusBarStyle.auto,
+    );
+  }
+}
