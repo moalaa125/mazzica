@@ -80,6 +80,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         androidCompactActionIndices: const [0, 1, 3],
         processingState: processingState,
         playing: _player.playing,
+        // updateTime: DateTime.now(),
         updatePosition: _player.position,
         bufferedPosition: _player.bufferedPosition,
         speed: _player.speed,
@@ -103,6 +104,25 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> seek(Duration position) async {
     await ready;
     await _player.seek(position);
+  }
+
+  @override
+  Future<void> seekForward(bool begin) async {
+    await ready;
+    if (begin) {
+      final newPosition = _player.position + const Duration(seconds: 10);
+      final duration = _player.duration ?? Duration.zero;
+      await _player.seek(newPosition > duration ? duration : newPosition);
+    }
+  }
+
+  @override
+  Future<void> seekBackward(bool begin) async {
+    await ready;
+    if (begin) {
+      final newPosition = _player.position - const Duration(seconds: 10);
+      await _player.seek(newPosition < Duration.zero ? Duration.zero : newPosition);
+    }
   }
 
   @override
