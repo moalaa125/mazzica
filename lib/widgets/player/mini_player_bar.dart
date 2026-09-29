@@ -79,18 +79,17 @@ class MiniPlayerBar extends StatelessWidget {
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       onPressed: () =>
-                          context.read<PlayerCubit>().playPrevious(),
+                          context.read<PlayerCubit>().seekBackward10(),
                       child: Icon(
-                        CupertinoIcons.backward_end_fill,
+                        CupertinoIcons.gobackward_10,
                         color: AppColors.lime,
-                        size: 20.sp,
+                        size: 22.sp,
                       ),
                     ),
                     SizedBox(width: 4.w),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
-                      onPressed: () =>
-                          context.read<PlayerCubit>().playPause(),
+                      onPressed: () => context.read<PlayerCubit>().playPause(),
                       child: Container(
                         padding: EdgeInsets.all(8.w),
                         decoration: BoxDecoration(
@@ -109,11 +108,12 @@ class MiniPlayerBar extends StatelessWidget {
                     SizedBox(width: 4.w),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
-                      onPressed: () => context.read<PlayerCubit>().playNext(),
+                      onPressed: () =>
+                          context.read<PlayerCubit>().seekForward10(),
                       child: Icon(
-                        CupertinoIcons.forward_end_fill,
+                        CupertinoIcons.goforward_10,
                         color: AppColors.lime,
-                        size: 20.sp,
+                        size: 22.sp,
                       ),
                     ),
                   ],
