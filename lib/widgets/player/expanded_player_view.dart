@@ -195,7 +195,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
         );
       },
       child: Lottie.asset(
-        'assets/animations/music.lottie',
+        'assets/animations/music2.lottie',
         width: 100,
         height: 100,
         frameRate: FrameRate.max,
