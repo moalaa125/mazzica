@@ -21,11 +21,10 @@ class PlayerCubit extends Cubit<PlayerAppState> {
 
   int _currentTrackIndex = -1;
   int _operationId = 0;
-  bool _completionHandled = false;
   bool _initialized = false;
 
   PlayerCubit(this._libraryCubit, this._storageService)
-      : super(const PlayerAppState()) {
+    : super(const PlayerAppState()) {
     unawaited(_init());
   }
 
@@ -34,9 +33,6 @@ class PlayerCubit extends Cubit<PlayerAppState> {
   Future<void> _init() async {
     try {
       await audioHandler.ready;
-
-      audioHandler.onSkipToNext = playNext;
-      audioHandler.onSkipToPrevious = playPrevious;
 
       _subscriptions.add(
         player.playerStateStream.listen(_onPlayerStateChanged),
@@ -50,6 +46,32 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         }),
       );
 
+      _subscriptions.add(
+        player.currentIndexStream.listen(_onCurrentIndexChanged),
+      );
+
+      _subscriptions.add(
+        player.durationStream.listen((duration) {
+          if (isClosed || duration == null) {
+            return;
+          }
+
+          if (duration <= Duration.zero) {
+            return;
+          }
+
+          emit(state.copyWith(duration: duration));
+        }),
+      );
+
+      _subscriptions.add(
+        player.errorStream.listen((error) {
+          if (!isClosed) {
+            _emitError('Audio playback error: ${error.message ?? error}');
+          }
+        }),
+      );
+
       _initialized = true;
 
       await _restoreLastPlayedTrack();
@@ -59,30 +81,50 @@ class PlayerCubit extends Cubit<PlayerAppState> {
   }
 
   void _onPlayerStateChanged(PlayerState playerState) {
-    if (isClosed) return;
-
-    final isCompleted =
-        playerState.processingState == ProcessingState.completed;
-
-    if (!isCompleted) {
-      _completionHandled = false;
+    if (isClosed) {
+      return;
     }
 
     emit(
       state.copyWith(
-        isPlaying: isCompleted ? false : playerState.playing,
+        isPlaying: playerState.playing,
         processingState: playerState.processingState,
       ),
     );
+  }
 
-    if (isCompleted && !_completionHandled) {
-      _completionHandled = true;
-      unawaited(_onSongCompleted());
+  void _onCurrentIndexChanged(int? index) {
+    if (isClosed || index == null) {
+      return;
     }
+
+    final tracks = _libraryCubit.state.tracks;
+
+    if (index < 0 || index >= tracks.length) {
+      return;
+    }
+
+    final track = tracks[index];
+
+    _currentTrackIndex = index;
+
+    emit(
+      state.copyWith(
+        currentTrackId: track.id,
+        title: track.title,
+        position: Duration.zero,
+        duration: player.duration ?? Duration.zero,
+        errorMessage: null,
+      ),
+    );
+
+    unawaited(_storageService.saveLastPlayedTrackId(track.id));
   }
 
   Future<void> _restoreLastPlayedTrack() async {
-    if (!_initialized || isClosed) return;
+    if (!_initialized || isClosed) {
+      return;
+    }
 
     try {
       final lastTrack = await _storageService.getLastPlayedTrack();
@@ -91,23 +133,20 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         return;
       }
 
-      final filePath =
-          await _storageService.getFilePath(lastTrack.fileName);
+      final tracks = await _storageService.loadTracks();
 
-      final file = File(filePath);
+      final index = tracks.indexWhere((track) => track.id == lastTrack.id);
 
-      if (!await file.exists() || await file.length() <= 0) {
+      if (index == -1) {
         await _storageService.clearLastPlayedTrack();
         return;
       }
 
-      final tracks = await _storageService.loadTracks();
+      final filePath = await _storageService.getFilePath(lastTrack.fileName);
 
-      final index = tracks.indexWhere(
-        (track) => track.id == lastTrack.id,
-      );
+      final file = File(filePath);
 
-      if (index == -1) {
+      if (!await file.exists() || await file.length() <= 0) {
         await _storageService.clearLastPlayedTrack();
         return;
       }
@@ -128,33 +167,13 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         ),
       );
 
-      await audioHandler.ready;
+      await _loadQueue(tracks, index, operationId: operationId);
 
       if (!_isCurrentOperation(operationId)) {
         return;
       }
 
-      await player.stop();
-
-      if (!_isCurrentOperation(operationId)) {
-        return;
-      }
-
-      final duration = await player.setFilePath(filePath);
-
-      if (!_isCurrentOperation(operationId)) {
-        return;
-      }
-
-      await audioHandler.updateCurrentTrackInfo(
-        lastTrack.id,
-        lastTrack.title,
-        duration: duration,
-      );
-
-      if (!_isCurrentOperation(operationId)) {
-        return;
-      }
+      final duration = player.duration;
 
       emit(
         state.copyWith(
@@ -165,25 +184,58 @@ class PlayerCubit extends Cubit<PlayerAppState> {
       );
     } catch (e) {
       if (!isClosed) {
-        _emitError(
-          'Could not restore the last track: $e',
-        );
+        _emitError('Could not restore the last track: $e');
       }
     }
   }
 
-  Future<void> _onSongCompleted() async {
-    if (isClosed) return;
-
-    final tracks = _libraryCubit.state.tracks;
-
-    if (tracks.isNotEmpty && _currentTrackIndex >= 0) {
-      await playNext();
-      return;
+  Future<Duration?> _loadQueue(
+    List<AudioTrack> tracks,
+    int initialIndex, {
+    required int operationId,
+  }) async {
+    if (!_isCurrentOperation(operationId)) {
+      return null;
     }
 
-    await player.seek(Duration.zero);
-    await player.pause();
+    if (tracks.isEmpty) {
+      return null;
+    }
+
+    if (initialIndex < 0 || initialIndex >= tracks.length) {
+      return null;
+    }
+
+    final filePaths = <String>[];
+
+    for (final track in tracks) {
+      final filePath = await _storageService.getFilePath(track.fileName);
+
+      final file = File(filePath);
+
+      if (!await file.exists()) {
+        throw FileSystemException(
+          'The stored audio file no longer exists.',
+          filePath,
+        );
+      }
+
+      if (await file.length() <= 0) {
+        throw FileSystemException('The stored audio file is empty.', filePath);
+      }
+
+      filePaths.add(filePath);
+    }
+
+    if (!_isCurrentOperation(operationId)) {
+      return null;
+    }
+
+    return audioHandler.setQueue(
+      tracks: tracks,
+      filePaths: filePaths,
+      initialIndex: initialIndex,
+    );
   }
 
   Future<void> pickAndPlayFile() async {
@@ -192,16 +244,14 @@ class PlayerCubit extends Cubit<PlayerAppState> {
     try {
       await audioHandler.ready;
 
-      // Compatible with the file_picker version used by this project.
-      final files = await FilePicker.pickFiles(
-        type: FileType.audio,
-      );
+      final files = await FilePicker.pickFiles(type: FileType.audio);
 
       if (!_isCurrentOperation(operationId) || files.isEmpty) {
         return;
       }
 
       final pickedFile = files.single;
+
       final sourcePath = pickedFile.path;
 
       if (sourcePath == null || sourcePath.isEmpty) {
@@ -212,8 +262,7 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         return;
       }
 
-      String title =
-          p.basenameWithoutExtension(sourcePath).trim();
+      String title = p.basenameWithoutExtension(sourcePath).trim();
 
       if (title.isEmpty) {
         title = 'Unknown track';
@@ -227,61 +276,48 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         if (tagTitle != null && tagTitle.isNotEmpty) {
           title = tagTitle;
         }
-      } catch (_) {
-        // Metadata is optional.
-        // Playback should still work if tag reading fails.
-      }
+      } catch (_) {}
 
       if (!_isCurrentOperation(operationId)) {
         return;
       }
 
-      // IMPORTANT:
-      // The selected file is copied into permanent app storage.
-      // The temporary picker path is never passed to just_audio.
       final savedTrack = await _libraryCubit.saveTrack(
         sourcePath: sourcePath,
         title: title,
       );
 
-      if (!_isCurrentOperation(operationId) ||
-          savedTrack == null) {
+      if (!_isCurrentOperation(operationId) || savedTrack == null) {
         return;
       }
 
       final tracks = _libraryCubit.state.tracks;
 
-      _currentTrackIndex = tracks.indexWhere(
-        (track) => track.id == savedTrack.id,
-      );
+      final index = tracks.indexWhere((track) => track.id == savedTrack.id);
 
-      await _loadAndPlayTrack(
-        savedTrack,
-        operationId: operationId,
-      );
+      if (index == -1) {
+        throw StateError(
+          'The newly imported track was not found in the library.',
+        );
+      }
+
+      _currentTrackIndex = index;
+
+      await _loadAndPlayTrack(savedTrack, operationId: operationId);
     } catch (e) {
       if (_isCurrentOperation(operationId)) {
-        _emitError(
-          'Could not import/play the selected audio file: $e',
-        );
+        _emitError('Could not import/play the selected audio file: $e');
       }
     }
   }
 
-  /// Compatibility entry point for callers that still have a stored path.
-  ///
-  /// New code should call [playTrack] so the stable AudioTrack ID is used.
-  Future<void> playFromLibrary(
-    String filePath,
-    String title,
-  ) async {
+  Future<void> playFromLibrary(String filePath, String title) async {
     final tracks = await _storageService.loadTracks();
 
     AudioTrack? track;
 
     for (final candidate in tracks) {
-      final candidatePath =
-          await _storageService.getFilePath(
+      final candidatePath = await _storageService.getFilePath(
         candidate.fileName,
       );
 
@@ -291,12 +327,8 @@ class PlayerCubit extends Cubit<PlayerAppState> {
       }
     }
 
-    // Title is only a backwards-compatible fallback.
-    // It is intentionally rejected when ambiguous.
     if (track == null) {
-      final matches = tracks.where(
-        (candidate) => candidate.title == title,
-      );
+      final matches = tracks.where((candidate) => candidate.title == title);
 
       if (matches.length == 1) {
         track = matches.single;
@@ -304,9 +336,7 @@ class PlayerCubit extends Cubit<PlayerAppState> {
     }
 
     if (track == null) {
-      _emitError(
-        'The selected track could not be found in the library.',
-      );
+      _emitError('The selected track could not be found in the library.');
       return;
     }
 
@@ -316,10 +346,7 @@ class PlayerCubit extends Cubit<PlayerAppState> {
   Future<void> playTrack(AudioTrack track) async {
     final operationId = ++_operationId;
 
-    await _loadAndPlayTrack(
-      track,
-      operationId: operationId,
-    );
+    await _loadAndPlayTrack(track, operationId: operationId);
   }
 
   Future<void> _loadAndPlayTrack(
@@ -333,26 +360,12 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         (candidate) => candidate.id == track.id,
       );
 
-      if (libraryIndex >= 0) {
-        _currentTrackIndex = libraryIndex;
-      } else {
-        final storedTracks =
-            await _storageService.loadTracks();
-
-        _currentTrackIndex = storedTracks.indexWhere(
-          (candidate) => candidate.id == track.id,
-        );
-
-        if (_currentTrackIndex == -1) {
-          throw StateError(
-            'Track is no longer in the audio library.',
-          );
-        }
+      if (libraryIndex == -1) {
+        throw StateError('Track is no longer in the audio library.');
       }
 
-      // Update the track identity immediately.
-      // Playback streams should never decide which title
-      // the UI displays.
+      _currentTrackIndex = libraryIndex;
+
       emit(
         state.copyWith(
           currentTrackId: track.id,
@@ -371,8 +384,7 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         return;
       }
 
-      final filePath =
-          await _storageService.getFilePath(track.fileName);
+      final filePath = await _storageService.getFilePath(track.fileName);
 
       final file = File(filePath);
 
@@ -384,25 +396,18 @@ class PlayerCubit extends Cubit<PlayerAppState> {
       }
 
       if (await file.length() <= 0) {
-        throw FileSystemException(
-          'The stored audio file is empty.',
-          filePath,
-        );
+        throw FileSystemException('The stored audio file is empty.', filePath);
       }
 
       if (!_isCurrentOperation(operationId)) {
         return;
       }
 
-      await player.stop();
-
-      if (!_isCurrentOperation(operationId)) {
-        return;
-      }
-
-      // Always use the permanent app-owned path.
-      final duration =
-          await player.setFilePath(filePath);
+      final duration = await _loadQueue(
+        tracks,
+        libraryIndex,
+        operationId: operationId,
+      );
 
       if (!_isCurrentOperation(operationId)) {
         return;
@@ -426,9 +431,7 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         ),
       );
 
-      await _storageService.saveLastPlayedTrackId(
-        track.id,
-      );
+      await _storageService.saveLastPlayedTrackId(track.id);
 
       if (!_isCurrentOperation(operationId)) {
         return;
@@ -451,74 +454,63 @@ class PlayerCubit extends Cubit<PlayerAppState> {
       if (_isCurrentOperation(operationId)) {
         _emitError(
           'Could not play "${track.title}": $e',
+          operationId: operationId,
         );
       }
     }
   }
 
   Future<void> playNext() async {
-    final tracks = _libraryCubit.state.tracks;
+    try {
+      await audioHandler.ready;
 
-    if (tracks.isEmpty) {
-      return;
+      final tracks = _libraryCubit.state.tracks;
+
+      if (tracks.isEmpty) {
+        return;
+      }
+
+      if (player.audioSources.isEmpty || player.currentIndex == null) {
+        await playTrack(tracks.first);
+        return;
+      }
+
+      await audioHandler.skipToNext();
+    } catch (e) {
+      _emitError('Could not play the next track: $e');
     }
-
-    final currentId = state.currentTrackId;
-
-    final currentIndex = currentId == null
-        ? _currentTrackIndex
-        : tracks.indexWhere(
-            (track) => track.id == currentId,
-          );
-
-    final nextIndex =
-        currentIndex < 0 ||
-                currentIndex >= tracks.length - 1
-            ? 0
-            : currentIndex + 1;
-
-    final nextTrack = tracks[nextIndex];
-
-    _currentTrackIndex = nextIndex;
-
-    await playTrack(nextTrack);
   }
 
   Future<void> playPrevious() async {
-    final tracks = _libraryCubit.state.tracks;
+    try {
+      await audioHandler.ready;
 
-    if (tracks.isEmpty) {
-      return;
+      final tracks = _libraryCubit.state.tracks;
+
+      if (tracks.isEmpty) {
+        return;
+      }
+
+      if (player.audioSources.isEmpty || player.currentIndex == null) {
+        await playTrack(tracks.last);
+        return;
+      }
+
+      await audioHandler.skipToPrevious();
+    } catch (e) {
+      _emitError('Could not play the previous track: $e');
     }
-
-    final currentId = state.currentTrackId;
-
-    final currentIndex = currentId == null
-        ? _currentTrackIndex
-        : tracks.indexWhere(
-            (track) => track.id == currentId,
-          );
-
-    final previousIndex =
-        currentIndex <= 0
-            ? tracks.length - 1
-            : currentIndex - 1;
-
-    final previousTrack = tracks[previousIndex];
-
-    _currentTrackIndex = previousIndex;
-
-    await playTrack(previousTrack);
   }
 
   Future<void> playPause() async {
     try {
       await audioHandler.ready;
 
-      if (player.processingState ==
-          ProcessingState.completed) {
+      if (player.processingState == ProcessingState.completed) {
         await player.seek(Duration.zero);
+
         await audioHandler.play();
+
         return;
       }
 
@@ -528,54 +520,42 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         await audioHandler.play();
       }
     } catch (e) {
-      _emitError(
-        'Playback control failed: $e',
-      );
+      _emitError('Playback control failed: $e');
     }
   }
 
   Future<void> seek(Duration position) async {
     try {
-      final safePosition =
-          position < Duration.zero
-              ? Duration.zero
-              : position > state.duration
-                  ? state.duration
-                  : position;
+      final safePosition = position < Duration.zero
+          ? Duration.zero
+          : position > state.duration
+          ? state.duration
+          : position;
 
       await audioHandler.seek(safePosition);
     } catch (e) {
-      _emitError(
-        'Seek failed: $e',
-      );
+      _emitError('Seek failed: $e');
     }
   }
 
   Future<void> seekForward10() async {
-    await seek(
-      state.position + const Duration(seconds: 10),
-    );
+    await seek(state.position + const Duration(seconds: 10));
   }
 
   Future<void> seekBackward10() async {
-    await seek(
-      state.position - const Duration(seconds: 10),
-    );
+    await seek(state.position - const Duration(seconds: 10));
   }
 
   Future<void> deleteTrack(AudioTrack track) async {
-    final wasCurrent =
-        state.currentTrackId == track.id;
+    final wasCurrent = state.currentTrackId == track.id;
 
     if (wasCurrent) {
       ++_operationId;
 
       try {
-        await audioHandler.clearCurrentTrack();
+        await audioHandler.clearQueue();
       } catch (e) {
-        _emitError(
-          'Could not stop the current track: $e',
-        );
+        _emitError('Could not stop the current track: $e');
         return;
       }
 
@@ -603,9 +583,7 @@ class PlayerCubit extends Cubit<PlayerAppState> {
         await _storageService.clearLastPlayedTrack();
       }
     } catch (e) {
-      _emitError(
-        'Could not delete "${track.title}": $e',
-      );
+      _emitError('Could not delete "${track.title}": $e');
     }
   }
 
@@ -613,25 +591,16 @@ class PlayerCubit extends Cubit<PlayerAppState> {
     return !isClosed && operationId == _operationId;
   }
 
-  void _emitError(
-    String message, {
-    int? operationId,
-  }) {
+  void _emitError(String message, {int? operationId}) {
     if (isClosed) {
       return;
     }
 
-    if (operationId != null &&
-        !_isCurrentOperation(operationId)) {
+    if (operationId != null && !_isCurrentOperation(operationId)) {
       return;
     }
 
-    emit(
-      state.copyWith(
-        isPlaying: false,
-        errorMessage: message,
-      ),
-    );
+    emit(state.copyWith(isPlaying: false, errorMessage: message));
   }
 
   @override
@@ -639,9 +608,6 @@ class PlayerCubit extends Cubit<PlayerAppState> {
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
-
-    audioHandler.onSkipToNext = null;
-    audioHandler.onSkipToPrevious = null;
 
     return super.close();
   }
