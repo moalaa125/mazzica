@@ -3,7 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'dart:math' as math;
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
-class WaveSeekBar extends StatelessWidget {
+class WaveSeekBar extends StatefulWidget {
   const WaveSeekBar({
     super.key,
     required this.progress,
@@ -25,36 +25,91 @@ class WaveSeekBar extends StatelessWidget {
   static const double thumbRadius = 14.0;
 
   @override
+  State<WaveSeekBar> createState() => _WaveSeekBarState();
+}
+
+class _WaveSeekBarState extends State<WaveSeekBar> {
+  bool _isHolding = false;
+
+  void _setHolding(bool value) {
+    if (_isHolding != value) {
+      setState(() {
+        _isHolding = value;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         void handleDrag(double dx) {
-          final newProgress = (dx / constraints.maxWidth).clamp(0.0, 1.0);
-          onSeek(newProgress);
+          final newProgress =
+              (dx / constraints.maxWidth).clamp(0.0, 1.0);
+
+          widget.onSeek(newProgress);
         }
 
         final width = constraints.maxWidth;
-        final height = 25.h;
+        final height = 30.h;
         final midY = height / 2;
 
-        final splitX = width * progress;
-        final thumbY =
-            midY + waveAmplitude * math.sin(progress * waveCount * 2 * math.pi);
+        final splitX = width * widget.progress;
+
+        final thumbY = midY +
+            WaveSeekBar.waveAmplitude *
+                math.sin(
+                  widget.progress *
+                      widget.waveCount *
+                      2 *
+                      math.pi,
+                );
+
+        final thumbSize = _isHolding
+            ? WaveSeekBar.thumbRadius * 2.8
+            : WaveSeekBar.thumbRadius * 2;
+
+        final thumbOffset = thumbSize / 2;
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragUpdate: (details) =>
-              handleDrag(details.localPosition.dx),
-          onHorizontalDragEnd: (_) => onSeekEnd(progress),
-          onTapDown: (details) {
-            final newProgress =
-                (details.localPosition.dx / constraints.maxWidth).clamp(
-                  0.0,
-                  1.0,
-                );
-            onSeek(newProgress);
-            onSeekEnd(newProgress);
+
+          onHorizontalDragStart: (_) {
+            _setHolding(true);
           },
+
+          onHorizontalDragUpdate: (details) {
+            handleDrag(details.localPosition.dx);
+          },
+
+          onHorizontalDragEnd: (_) {
+            _setHolding(false);
+            widget.onSeekEnd(widget.progress);
+          },
+
+          onHorizontalDragCancel: () {
+            _setHolding(false);
+          },
+
+          onTapDown: (details) {
+            _setHolding(true);
+
+            final newProgress =
+                (details.localPosition.dx / constraints.maxWidth)
+                    .clamp(0.0, 1.0);
+
+            widget.onSeek(newProgress);
+          },
+
+          onTapUp: (_) {
+            _setHolding(false);
+            widget.onSeekEnd(widget.progress);
+          },
+
+          onTapCancel: () {
+            _setHolding(false);
+          },
+
           child: SizedBox(
             height: height,
             width: double.infinity,
@@ -66,22 +121,59 @@ class WaveSeekBar extends StatelessWidget {
                   height: height,
                   child: CustomPaint(
                     painter: _WaveSeekBarPainter(
-                      progress: progress,
-                      activeColor: activeColor,
-                      inactiveColor: inactiveColor,
-                      waveCount: waveCount,
+                      progress: widget.progress,
+                      activeColor: widget.activeColor,
+                      inactiveColor: widget.inactiveColor,
+                      waveCount: widget.waveCount,
                     ),
                   ),
                 ),
-                Positioned(
-                  left: splitX - thumbRadius,
-                  top: thumbY - thumbRadius,
+
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOutCubic,
+
+                  left: splitX - thumbOffset,
+                  top: thumbY - thumbOffset,
+
                   child: IgnorePointer(
-                    child: GlassContainer(
-                      glowIntensity: .1,
-                      width: thumbRadius * 2,
-                      height: thumbRadius * 2,
-                      // borderRadius: BorderRadius.circular(thumbRadius),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      curve: Curves.easeOutCubic,
+
+                      width: thumbSize,
+                      height: thumbSize,
+
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+
+                        border: _isHolding
+                            ? Border.all(
+                                color: widget.activeColor.withValues(
+                                  alpha: 0.9,
+                                ),
+                                width: 2,
+                              )
+                            : null,
+
+                        boxShadow: _isHolding
+                            ? [
+                                BoxShadow(
+                                  color: widget.activeColor.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                  blurRadius: 18,
+                                  spreadRadius: 3,
+                                ),
+                              ]
+                            : null,
+                      ),
+
+                      child: GlassContainer(
+                        glowIntensity: _isHolding ? 0.35 : 0.1,
+                        width: thumbSize,
+                        height: thumbSize,
+                      ),
                     ),
                   ),
                 ),
@@ -114,10 +206,15 @@ class _WaveSeekBarPainter extends CustomPainter {
     path.moveTo(0, midY);
 
     for (double x = 0; x <= size.width; x += 1) {
-      final y =
-          midY +
+      final y = midY +
           WaveSeekBar.waveAmplitude *
-              math.sin((x / size.width) * waveCount * 2 * math.pi);
+              math.sin(
+                (x / size.width) *
+                    waveCount *
+                    2 *
+                    math.pi,
+              );
+
       path.lineTo(x, y);
     }
 
@@ -142,18 +239,46 @@ class _WaveSeekBarPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     canvas.save();
-    canvas.clipRect(Rect.fromLTWH(0, 0, splitX, size.height));
-    canvas.drawPath(fullPath, activePaint);
+
+    canvas.clipRect(
+      Rect.fromLTWH(
+        0,
+        0,
+        splitX,
+        size.height,
+      ),
+    );
+
+    canvas.drawPath(
+      fullPath,
+      activePaint,
+    );
+
     canvas.restore();
 
     canvas.save();
-    canvas.clipRect(Rect.fromLTWH(splitX, 0, size.width - splitX, size.height));
-    canvas.drawPath(fullPath, inactivePaint);
+
+    canvas.clipRect(
+      Rect.fromLTWH(
+        splitX,
+        0,
+        size.width - splitX,
+        size.height,
+      ),
+    );
+
+    canvas.drawPath(
+      fullPath,
+      inactivePaint,
+    );
+
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _WaveSeekBarPainter oldDelegate) =>
+  bool shouldRepaint(
+    covariant _WaveSeekBarPainter oldDelegate,
+  ) =>
       oldDelegate.progress != progress ||
       oldDelegate.activeColor != activeColor ||
       oldDelegate.inactiveColor != inactiveColor ||
