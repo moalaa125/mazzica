@@ -43,7 +43,7 @@ class GlassTextField extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(30),
         border: Border.all(
           color: AppColors.textSecondary.withValues(alpha: 0.15),
         ),

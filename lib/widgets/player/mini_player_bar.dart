@@ -11,7 +11,7 @@ class MiniPlayerBar extends StatelessWidget {
   final VoidCallback onTap;
 
   const MiniPlayerBar({super.key, required this.onTap});
-
+  final LiquidShape shape = const LiquidRoundedSuperellipse(borderRadius: 30);
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -21,6 +21,7 @@ class MiniPlayerBar extends StatelessWidget {
         height: 64.h,
         margin: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
         child: GlassContainer(
+          shape: shape,
           glowIntensity: 0.15,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12.w),
@@ -86,7 +87,6 @@ class MiniPlayerBar extends StatelessWidget {
                         size: 22.sp,
                       ),
                     ),
-                    SizedBox(width: 4.w),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       onPressed: () => context.read<PlayerCubit>().playPause(),
@@ -105,7 +105,6 @@ class MiniPlayerBar extends StatelessWidget {
                         ),
                       ),
                     ),
-                    SizedBox(width: 4.w),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       onPressed: () =>
