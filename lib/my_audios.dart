@@ -17,7 +17,7 @@ class MyAudios extends StatelessWidget {
     final mediaQuery = MediaQuery.of(context);
     final topPadding = mediaQuery.padding.top + 44.h;
     final bottomPadding = mediaQuery.viewPadding.bottom;
-    final bottomInset = 90.h + 68.h + bottomPadding + 16.h;
+    final bottomInset = 74.h + 68.h + bottomPadding + 16.h;
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.transparent,

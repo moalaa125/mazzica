@@ -19,7 +19,7 @@ class MiniPlayerBar extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Container(
         height: 64.h,
-        margin: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+        margin: EdgeInsets.symmetric(horizontal: 12.w, vertical: 2.h),
         child: GlassContainer(
           shape: shape,
           glowIntensity: 0.15,

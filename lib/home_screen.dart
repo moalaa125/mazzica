@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
-    final effectiveBottomBarHeight = 90.h + bottomPadding;
+    final effectiveBottomBarHeight = 85.h + bottomPadding;
 
     return GlassScaffold(
       body: Stack(
