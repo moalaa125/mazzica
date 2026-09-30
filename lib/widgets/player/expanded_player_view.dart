@@ -14,10 +14,7 @@ import 'package:mazzica/widgets/wave.dart';
 class ExpandedPlayerView extends StatefulWidget {
   final VoidCallback onCollapse;
 
-  const ExpandedPlayerView({
-    super.key,
-    required this.onCollapse,
-  });
+  const ExpandedPlayerView({super.key, required this.onCollapse});
 
   @override
   State<ExpandedPlayerView> createState() => _ExpandedPlayerViewState();
@@ -51,13 +48,15 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
     return BlocBuilder<PlayerCubit, PlayerAppState>(
       builder: (context, state) {
         final durationMs = state.duration.inMilliseconds.toDouble().clamp(
-              1.0,
-              double.infinity,
-            );
+          1.0,
+          double.infinity,
+        );
+
         final positionMs = state.position.inMilliseconds.toDouble().clamp(
-              0.0,
-              durationMs,
-            );
+          0.0,
+          durationMs,
+        );
+
         final progress =
             _dragValue ?? (positionMs / durationMs).clamp(0.0, 1.0);
 
@@ -66,11 +65,21 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
           progress: progress.toDouble(),
           activeColor: AppColors.lime,
           inactiveColor: AppColors.textSecondary,
-          onSeek: (value) => setState(() => _dragValue = value),
+
+          onSeek: (value) {
+            setState(() {
+              _dragValue = value;
+            });
+          },
+
           onSeekEnd: (value) {
             final seekMs = (value * durationMs).toInt();
+
+            setState(() {
+              _dragValue = null;
+            });
+
             context.read<PlayerCubit>().seek(Duration(milliseconds: seekMs));
-            setState(() => _dragValue = null);
           },
         );
       },
@@ -79,8 +88,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
 
   Widget _buildPlayPauseButton() {
     return BlocBuilder<PlayerCubit, PlayerAppState>(
-      buildWhen: (previous, current) =>
-          previous.isPlaying != current.isPlaying,
+      buildWhen: (previous, current) => previous.isPlaying != current.isPlaying,
       builder: (context, state) {
         return CustomButtons(
           buttonIcon: state.isPlaying
@@ -154,7 +162,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
         return SizedBox(
           width: double.infinity,
           child: MarqueeText(
-            key: ValueKey(state.title), 
+            key: ValueKey(state.title),
             text: state.title,
             style: GoogleFonts.rammettoOne(fontSize: 40),
           ),
@@ -162,11 +170,13 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
       },
     );
   }
+
   Widget _buildGlowingCover() {
     return AnimatedBuilder(
       animation: _glowAnimation,
       builder: (context, child) {
         final strength = _glowAnimation.value;
+
         return Container(
           height: 350.h,
           width: 450.w,
@@ -202,6 +212,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
         controller: _lottieController,
         onLoaded: (composition) {
           _lottieController.duration = composition.duration;
+
           if (context.read<PlayerCubit>().state.isPlaying) {
             _lottieController.repeat();
           }
@@ -253,11 +264,17 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
                       _buildPickFileButton(),
                     ],
                   ),
+
                   SizedBox(height: 40.h),
+
                   _buildGlowingCover(),
+
                   SizedBox(height: 60.h),
+
                   SizedBox(width: double.infinity, child: _buildTrackInfo()),
+
                   SizedBox(height: 40.h),
+
                   Padding(
                     padding: EdgeInsets.only(left: 20.w, right: 20.w),
                     child: _buildSeekBar(),
@@ -265,6 +282,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
                 ],
               ),
             ),
+
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(top: 20),
@@ -272,6 +290,7 @@ class _ExpandedPlayerViewState extends State<ExpandedPlayerView>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(height: 10.h),
+
                     SizedBox(
                       width: double.infinity,
                       child: Row(

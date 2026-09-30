@@ -23,6 +23,11 @@ class PlayerCubit extends Cubit<PlayerAppState> {
   int _operationId = 0;
   bool _initialized = false;
 
+ 
+  bool _isSeeking = false;
+
+  int _seekRequestId = 0;
+
   PlayerCubit(this._libraryCubit, this._storageService)
     : super(const PlayerAppState()) {
     unawaited(_init());
@@ -40,9 +45,11 @@ class PlayerCubit extends Cubit<PlayerAppState> {
 
       _subscriptions.add(
         player.positionStream.listen((position) {
-          if (!isClosed) {
-            emit(state.copyWith(position: position));
+          if (isClosed || _isSeeking) {
+            return;
           }
+
+          emit(state.copyWith(position: position));
         }),
       );
 
@@ -97,6 +104,9 @@ class PlayerCubit extends Cubit<PlayerAppState> {
     if (isClosed || index == null) {
       return;
     }
+
+    _seekRequestId++;
+    _isSeeking = false;
 
     final tracks = _libraryCubit.state.tracks;
 
@@ -525,15 +535,59 @@ class PlayerCubit extends Cubit<PlayerAppState> {
   }
 
   Future<void> seek(Duration position) async {
-    try {
-      final safePosition = position < Duration.zero
-          ? Duration.zero
-          : position > state.duration
-          ? state.duration
-          : position;
+    final safePosition = position < Duration.zero
+        ? Duration.zero
+        : position > state.duration
+        ? state.duration
+        : position;
 
+    final requestId = ++_seekRequestId;
+
+    _isSeeking = true;
+
+    if (!isClosed) {
+      emit(
+        state.copyWith(
+          position: safePosition,
+          errorMessage: null,
+        ),
+      );
+    }
+
+    try {
       await audioHandler.seek(safePosition);
+
+      if (isClosed || requestId != _seekRequestId) {
+        return;
+      }
+
+      final actualPosition = player.position;
+
+      _isSeeking = false;
+
+      if (!isClosed) {
+        emit(
+          state.copyWith(
+            position: actualPosition,
+            errorMessage: null,
+          ),
+        );
+      }
     } catch (e) {
+      if (isClosed || requestId != _seekRequestId) {
+        return;
+      }
+
+      _isSeeking = false;
+
+      if (!isClosed) {
+        emit(
+          state.copyWith(
+            position: player.position,
+          ),
+        );
+      }
+
       _emitError('Seek failed: $e');
     }
   }
@@ -551,6 +605,9 @@ class PlayerCubit extends Cubit<PlayerAppState> {
 
     if (wasCurrent) {
       ++_operationId;
+
+      _seekRequestId++;
+      _isSeeking = false;
 
       try {
         await audioHandler.clearQueue();

@@ -5,6 +5,7 @@ import 'package:mazzica/constants/app_color.dart';
 import 'package:mazzica/cubits/audio_library_cubit.dart';
 import 'package:mazzica/cubits/audio_library_state.dart';
 import 'package:mazzica/cubits/player_cubit.dart';
+import 'package:mazzica/cubits/player_state.dart';
 import 'package:mazzica/models/audio_track.dart';
 
 class MyAudios extends StatelessWidget {
@@ -12,11 +13,9 @@ class MyAudios extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding =
-        MediaQuery.of(context).viewPadding.bottom;
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
 
-    final bottomInset =
-        90.h + 68.h + bottomPadding + 16.h;
+    final bottomInset = 90.h + 68.h + bottomPadding + 16.h;
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.transparent,
@@ -28,8 +27,7 @@ class MyAudios extends StatelessWidget {
             fontSize: 18.sp,
           ),
         ),
-        backgroundColor:
-            AppColors.surface.withValues(alpha: 0.8),
+        backgroundColor: AppColors.surface.withValues(alpha: 0.8),
       ),
       child: SafeArea(
         bottom: false,
@@ -66,8 +64,7 @@ class MyAudios extends StatelessWidget {
                     Text(
                       'choose a song from the files and it will be saved here',
                       style: TextStyle(
-                        color: AppColors.textSecondary
-                            .withValues(alpha: 0.6),
+                        color: AppColors.textSecondary.withValues(alpha: 0.6),
                         fontSize: 14.sp,
                       ),
                     ),
@@ -109,118 +106,269 @@ class _AudioTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: ValueKey(track.id),
-      direction: DismissDirection.endToStart,
+    return BlocBuilder<PlayerCubit, PlayerAppState>(
+      buildWhen: (previous, current) =>
+          previous.currentTrackId != current.currentTrackId ||
+          previous.isPlaying != current.isPlaying,
+      builder: (context, state) {
+        final isCurrentTrack = state.currentTrackId == track.id;
+        final isPlaying = isCurrentTrack && state.isPlaying;
 
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: EdgeInsets.only(right: 20.w),
-        margin: EdgeInsets.only(bottom: 8.h),
-        decoration: BoxDecoration(
-          color:
-              AppColors.coral.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(
-          CupertinoIcons.delete,
-          color: AppColors.coral,
-          size: 24.sp,
-        ),
-      ),
+        return Dismissible(
+          key: ValueKey(track.id),
+          direction: DismissDirection.endToStart,
 
-      onDismissed: (_) {
-        context
-            .read<PlayerCubit>()
-            .deleteTrack(track);
-      },
-
-      child: GestureDetector(
-        onTap: () async {
-          // Pass the complete AudioTrack so PlayerCubit
-          // can use the stable track ID.
-          await context
-              .read<PlayerCubit>()
-              .playTrack(track);
-        },
-
-        child: Container(
-          margin: EdgeInsets.only(bottom: 8.h),
-          padding: EdgeInsets.symmetric(
-            horizontal: 16.w,
-            vertical: 14.h,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: AppColors.textSecondary
-                  .withValues(alpha: 0.1),
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: EdgeInsets.only(right: 20.w),
+            margin: EdgeInsets.only(bottom: 8.h),
+            decoration: BoxDecoration(
+              color: AppColors.coral.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              CupertinoIcons.delete,
+              color: AppColors.coral,
+              size: 24.sp,
             ),
           ),
 
-          child: Row(
-            children: [
-              Container(
-                width: 44.w,
-                height: 44.w,
-                decoration: BoxDecoration(
-                  color: AppColors.lime
-                      .withValues(alpha: 0.15),
-                  borderRadius:
-                      BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  CupertinoIcons.play_fill,
-                  color: AppColors.lime,
-                  size: 20.sp,
-                ),
+          onDismissed: (_) {
+            context.read<PlayerCubit>().deleteTrack(track);
+          },
+
+          child: GestureDetector(
+            onTap: () async {
+              await context.read<PlayerCubit>().playTrack(track);
+            },
+
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+
+              margin: EdgeInsets.only(bottom: 8.h),
+
+              padding: EdgeInsets.symmetric(
+                horizontal: 16.w,
+                vertical: 14.h,
               ),
 
-              SizedBox(width: 12.w),
+              decoration: BoxDecoration(
+                color: isPlaying
+                    ? AppColors.lime.withValues(alpha: 0.08)
+                    : AppColors.surface,
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      track.title,
-                      style: TextStyle(
-                        color:
-                            AppColors.textPrimary,
-                        fontSize: 16.sp,
-                        fontWeight:
-                            FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow:
-                          TextOverflow.ellipsis,
+                borderRadius: BorderRadius.circular(12),
+
+                border: Border.all(
+                  color: isPlaying
+                      ? AppColors.lime.withValues(alpha: 0.55)
+                      : AppColors.textSecondary.withValues(alpha: 0.1),
+
+                  width: isPlaying ? 1.2 : 1,
+                ),
+
+                boxShadow: isPlaying
+                    ? [
+                        BoxShadow(
+                          color: AppColors.lime.withValues(alpha: 0.08),
+                          blurRadius: 14,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+
+                    width: 44.w,
+                    height: 44.w,
+
+                    decoration: BoxDecoration(
+                      color: isPlaying
+                          ? AppColors.lime.withValues(alpha: 0.2)
+                          : AppColors.lime.withValues(alpha: 0.15),
+
+                      borderRadius: BorderRadius.circular(10),
+
+                      border: isPlaying
+                          ? Border.all(
+                              color: AppColors.lime.withValues(alpha: 0.4),
+                            )
+                          : null,
                     ),
 
-                    SizedBox(height: 4.h),
+                    child: isPlaying
+                        ? const _PlayingIndicator()
+                        : Icon(
+                            CupertinoIcons.play_fill,
+                            color: AppColors.lime,
+                            size: 20.sp,
+                          ),
+                  ),
 
-                    Text(
-                      '${track.addedAt.day}/${track.addedAt.month}/${track.addedAt.year}',
-                      style: TextStyle(
-                        color:
-                            AppColors.textSecondary,
-                        fontSize: 12.sp,
-                      ),
+                  SizedBox(width: 12.w),
+
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          track.title,
+                          style: TextStyle(
+                            color: isPlaying
+                                ? AppColors.lime
+                                : AppColors.textPrimary,
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        SizedBox(height: 4.h),
+
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+
+                          child: isPlaying
+                              ? Row(
+                                  key: const ValueKey('playing'),
+                                  children: [
+                                    Icon(
+                                      CupertinoIcons.waveform,
+                                      color: AppColors.lime.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                      size: 12.sp,
+                                    ),
+                                    SizedBox(width: 5.w),
+                                    Text(
+                                      'NOW PLAYING',
+                                      style: TextStyle(
+                                        color: AppColors.lime.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                        fontSize: 10.sp,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 1.1,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Text(
+                                  key: const ValueKey('date'),
+                                  '${track.addedAt.day}/${track.addedAt.month}/${track.addedAt.year}',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12.sp,
+                                  ),
+                                ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
 
-              Icon(
-                CupertinoIcons.chevron_right,
-                color: AppColors.textSecondary,
-                size: 16.sp,
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+
+                    child: isPlaying
+                        ? Icon(
+                            CupertinoIcons.waveform,
+                            key: const ValueKey('waveform'),
+                            color: AppColors.lime,
+                            size: 20.sp,
+                          )
+                        : Icon(
+                            CupertinoIcons.chevron_right,
+                            key: const ValueKey('arrow'),
+                            color: AppColors.textSecondary,
+                            size: 16.sp,
+                          ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
+  }
+}
+
+class _PlayingIndicator extends StatefulWidget {
+  const _PlayingIndicator();
+
+  @override
+  State<_PlayingIndicator> createState() => _PlayingIndicatorState();
+}
+
+class _PlayingIndicatorState extends State<_PlayingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final value = _controller.value;
+
+        final heights = [
+          8 + (10 * _wave(value)),
+          14 + (12 * _wave(value + 0.25)),
+          10 + (14 * _wave(value + 0.5)),
+          16 + (8 * _wave(value + 0.75)),
+        ];
+
+        return Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: List.generate(
+              heights.length,
+              (index) => Container(
+                width: 3.w,
+                height: heights[index].h,
+                margin: EdgeInsets.symmetric(horizontal: 1.5.w),
+                decoration: BoxDecoration(
+                  color: AppColors.lime,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  double _wave(double value) {
+    final normalized = value % 1.0;
+
+    if (normalized < 0.5) {
+      return normalized * 2;
+    }
+
+    return 2 - (normalized * 2);
   }
 }
