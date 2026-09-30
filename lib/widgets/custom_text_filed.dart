@@ -19,6 +19,7 @@ class GlassTextField extends StatelessWidget {
     this.enabled = true,
     this.focusNode,
     this.textInputAction,
+    this.padding,
   });
 
   final TextEditingController? controller;
@@ -35,73 +36,81 @@ class GlassTextField extends StatelessWidget {
   final bool enabled;
   final FocusNode? focusNode;
   final TextInputAction? textInputAction;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: AppColors.textSecondary.withValues(alpha: 0.15),
         ),
         boxShadow: [
           BoxShadow(
             color: AppColors.lime.withValues(alpha: 0.04),
-            blurRadius: 12,
+            blurRadius: 10,
             spreadRadius: -2,
           ),
         ],
       ),
-      child: CupertinoTextField(
-        
-        controller: controller,
-        focusNode: focusNode,
-        placeholder: placeholder,
-        autofocus: autofocus,
-        obscureText: obscureText,
-        keyboardType: keyboardType,
-        maxLines: maxLines,
-        enabled: enabled,
-        textInputAction: textInputAction,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        style: TextStyle(
-          color: AppColors.textPrimary,
-          fontSize: 16.sp,
-          fontWeight: FontWeight.w500,
-        ),
-        placeholderStyle: TextStyle(
-          color: AppColors.textSecondary.withValues(alpha: 0.5),
-          fontSize: 15.sp,
-          fontWeight: FontWeight.w400,
-        ),
-        padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 5.h),
-        decoration: const BoxDecoration(color: CupertinoColors.transparent),
-        cursorColor: AppColors.lime,
-        prefix: prefixIcon != null
-            ? Padding(
-                padding: EdgeInsets.only(left: 14.w),
-                child: Icon(
-                  prefixIcon,
-                  color: AppColors.lime.withValues(alpha: 0.7),
-                  size: 20.sp,
-                ),
-              )
-            : null,
-        suffix: suffixIcon != null
-            ? Padding(
-                padding: EdgeInsets.only(right: 14.w),
-                child: GestureDetector(
-                  onTap: onSuffixTap,
+      child: Center(
+        child: CupertinoTextField(
+          controller: controller,
+          focusNode: focusNode,
+          placeholder: placeholder,
+          autofocus: autofocus,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          enabled: enabled,
+          textInputAction: textInputAction,
+          onChanged: onChanged,
+          onSubmitted: onSubmitted,
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w500,
+          ),
+          placeholderStyle: TextStyle(
+            color: AppColors.textSecondary.withValues(alpha: 0.5),
+            fontSize: 13.sp,
+            fontWeight: FontWeight.w400,
+          ),
+          padding: padding ??
+              EdgeInsets.symmetric(
+                horizontal: 8.w,
+                vertical: 2.h,
+              ),
+          decoration: const BoxDecoration(
+            color: CupertinoColors.transparent,
+          ),
+          cursorColor: AppColors.lime,
+          prefix: prefixIcon != null
+              ? Padding(
+                  padding: EdgeInsets.only(left: 10.w),
                   child: Icon(
-                    suffixIcon,
-                    color: AppColors.textSecondary.withValues(alpha: 0.6),
-                    size: 20.sp,
+                    prefixIcon,
+                    color: AppColors.lime.withValues(alpha: 0.7),
+                    size: 16.sp,
                   ),
-                ),
-              )
-            : null,
+                )
+              : null,
+          suffix: suffixIcon != null
+              ? Padding(
+                  padding: EdgeInsets.only(right: 10.w),
+                  child: GestureDetector(
+                    onTap: onSuffixTap,
+                    child: Icon(
+                      suffixIcon,
+                      color: AppColors.textSecondary.withValues(alpha: 0.6),
+                      size: 16.sp,
+                    ),
+                  ),
+                )
+              : null,
+        ),
       ),
     );
   }

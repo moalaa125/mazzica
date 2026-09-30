@@ -21,15 +21,11 @@ class MyAudios extends StatelessWidget {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.transparent,
       navigationBar: CupertinoNavigationBar(
-        automaticBackgroundVisibility: true,
         enableBackgroundFilterBlur: true,
-        middle: Column(
-          children: [
-            Text(
-              'Your Audios',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 18.sp),
-            ),
-          ],
+        automaticBackgroundVisibility: true,
+        middle: Text(
+          'Your Audios',
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 18.sp),
         ),
         backgroundColor: AppColors.surface.withValues(alpha: 0.8),
       ),
@@ -49,13 +45,6 @@ class MyAudios extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    GlassTextField(
-                      placeholder: 'Search songs...',
-                      prefixIcon: CupertinoIcons.search,
-                      suffixIcon: CupertinoIcons.xmark_circle_fill,
-                      // onSuffixTap: () => _controller.clear(),
-                      onChanged: (value) => print(value),
-                    ),
                     Icon(
                       CupertinoIcons.music_note_2,
                       size: 64.sp,
@@ -88,7 +77,6 @@ class MyAudios extends StatelessWidget {
               itemCount: state.tracks.length,
               itemBuilder: (context, index) {
                 final track = state.tracks[index];
-
                 return _AudioTile(track: track);
               },
             );
@@ -213,6 +201,16 @@ class _AudioTile extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        SizedBox(
+                          height: 38.h, 
+                          width: 350.w,
+                          child: GlassTextField(
+                            placeholder: 'Search songs...',
+                            prefixIcon: CupertinoIcons.search,
+                            suffixIcon: CupertinoIcons.xmark_circle_fill,
+                            onChanged: (value) => print(value),
+                          ),
+                        ),
                         Text(
                           track.title,
                           style: TextStyle(
