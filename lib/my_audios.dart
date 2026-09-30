@@ -43,88 +43,93 @@ class MyAudios extends StatelessWidget {
       child: SafeArea(
         top: false,
         bottom: false,
-        child: Column(
-          children: [
-            SizedBox(height: topPadding + 10.h),
+        child: BlocBuilder<AudioLibraryCubit, AudioLibraryState>(
+          builder: (context, state) {
+            if (state.status == AudioLibraryStatus.loading &&
+                state.tracks.isEmpty) {
+              return const Center(
+                child: CupertinoActivityIndicator(color: AppColors.lime),
+              );
+            }
 
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w),
-              child: SizedBox(
-                height: 40.h,
-                width: double.infinity,
-                child: GlassTextField(
-                  placeholder: 'Search songs...',
-                  prefixIcon: CupertinoIcons.search,
-                  suffixIcon: CupertinoIcons.xmark_circle_fill,
-                  onChanged: (value) => print(value),
-                ),
-              ),
-            ),
-
-            SizedBox(height: 12.h),
-        // audio list 
-            Expanded(
-              child: BlocBuilder<AudioLibraryCubit, AudioLibraryState>(
-                builder: (context, state) {
-                  if (state.status == AudioLibraryStatus.loading &&
-                      state.tracks.isEmpty) {
-                    return const Center(
-                      child: CupertinoActivityIndicator(
-                        color: AppColors.lime,
+            if (state.tracks.isEmpty) {
+              return Padding(
+                padding: EdgeInsets.only(top: topPadding + 16.h),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.w),
+                      child: SizedBox(
+                        height: 40.h,
+                        child: GlassTextField(
+                          placeholder: 'Search songs...',
+                          prefixIcon: CupertinoIcons.search,
+                          suffixIcon: CupertinoIcons.xmark_circle_fill,
+                          onChanged: (value) => print(value),
+                        ),
                       ),
-                    );
-                  }
-
-                  if (state.tracks.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            CupertinoIcons.music_note_2,
-                            size: 64.sp,
-                            color: AppColors.textSecondary,
-                          ),
-                          SizedBox(height: 16.h),
-                          Text(
-                            'there is no saved songs',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 18.sp,
-                            ),
-                          ),
-                          SizedBox(height: 8.h),
-                          Text(
-                            'choose a song from the files and it will be saved here',
-                            style: TextStyle(
-                              color: AppColors.textSecondary
-                                  .withValues(alpha: 0.6),
-                              fontSize: 14.sp,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    padding: EdgeInsets.fromLTRB(
-                      16.w,
-                      0,
-                      16.w,
-                      bottomInset,
                     ),
-                    itemCount: state.tracks.length,
-                    itemBuilder: (context, index) {
-                      final track = state.tracks[index];
-                      return _AudioTile(track: track);
-                    },
-                  );
-                },
+                    const Spacer(),
+                    Icon(
+                      CupertinoIcons.music_note_2,
+                      size: 64.sp,
+                      color: AppColors.textSecondary,
+                    ),
+                    SizedBox(height: 16.h),
+                    Text(
+                      'there is no saved songs',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 18.sp,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    Text(
+                      'choose a song from the files and it will be saved here',
+                      style: TextStyle(
+                        color: AppColors.textSecondary.withValues(alpha: 0.6),
+                        fontSize: 14.sp,
+                      ),
+                    ),
+                    const Spacer(),
+                  ],
+                ),
+              );
+            }
+
+            // 🔥 جعل القائمة تبدأ من حقل البحث ثم الأغاني، لكي تسحب كلها معاً تحت الـ Navbar
+            return ListView.builder(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                16.w,
+                topPadding + 10.h,
+                16.w,
+                bottomInset,
               ),
-            ),
-          ],
+              itemCount: state.tracks.length + 1, // +1 لحقل البحث في البداية
+              itemBuilder: (context, index) {
+                // أول عنصر هو حقل البحث الضبابي
+                if (index == 0) {
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: 12.h),
+                    child: SizedBox(
+                      height: 40.h,
+                      child: GlassTextField(
+                        placeholder: 'Search songs...',
+                        prefixIcon: CupertinoIcons.search,
+                        suffixIcon: CupertinoIcons.xmark_circle_fill,
+                        onChanged: (value) => print(value),
+                      ),
+                    ),
+                  );
+                }
+
+                // باقي العناصر هي الأغاني
+                final track = state.tracks[index - 1];
+                return _AudioTile(track: track);
+              },
+            );
+          },
         ),
       ),
     );
