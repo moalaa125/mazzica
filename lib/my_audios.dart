@@ -14,8 +14,9 @@ class MyAudios extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
-
+    final mediaQuery = MediaQuery.of(context);
+    final topPadding = mediaQuery.padding.top + 44.h;
+    final bottomPadding = mediaQuery.viewPadding.bottom;
     final bottomInset = 90.h + 68.h + bottomPadding + 16.h;
 
     return CupertinoPageScaffold(
@@ -25,62 +26,105 @@ class MyAudios extends StatelessWidget {
         automaticBackgroundVisibility: true,
         middle: Text(
           'Your Audios',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 18.sp),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        backgroundColor: AppColors.surface.withValues(alpha: 0.8),
+        backgroundColor: AppColors.bg.withValues(alpha: 0.6),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.textSecondary.withValues(alpha: 0.1),
+            width: 0.5,
+          ),
+        ),
       ),
       child: SafeArea(
+        top: false,
         bottom: false,
-        child: BlocBuilder<AudioLibraryCubit, AudioLibraryState>(
-          builder: (context, state) {
-            if (state.status == AudioLibraryStatus.loading &&
-                state.tracks.isEmpty) {
-              return const Center(
-                child: CupertinoActivityIndicator(color: AppColors.lime),
-              );
-            }
+        child: Column(
+          children: [
+            SizedBox(height: topPadding + 10.h),
 
-            if (state.tracks.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      CupertinoIcons.music_note_2,
-                      size: 64.sp,
-                      color: AppColors.textSecondary,
-                    ),
-                    SizedBox(height: 16.h),
-                    Text(
-                      'there is no saved songs',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 18.sp,
-                      ),
-                    ),
-                    SizedBox(height: 8.h),
-                    Text(
-                      'choose a song from the files and it will be saved here',
-                      style: TextStyle(
-                        color: AppColors.textSecondary.withValues(alpha: 0.6),
-                        fontSize: 14.sp,
-                      ),
-                    ),
-                  ],
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w),
+              child: SizedBox(
+                height: 40.h,
+                width: double.infinity,
+                child: GlassTextField(
+                  placeholder: 'Search songs...',
+                  prefixIcon: CupertinoIcons.search,
+                  suffixIcon: CupertinoIcons.xmark_circle_fill,
+                  onChanged: (value) => print(value),
                 ),
-              );
-            }
+              ),
+            ),
 
-            return ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, bottomInset),
-              itemCount: state.tracks.length,
-              itemBuilder: (context, index) {
-                final track = state.tracks[index];
-                return _AudioTile(track: track);
-              },
-            );
-          },
+            SizedBox(height: 12.h),
+        // audio list 
+            Expanded(
+              child: BlocBuilder<AudioLibraryCubit, AudioLibraryState>(
+                builder: (context, state) {
+                  if (state.status == AudioLibraryStatus.loading &&
+                      state.tracks.isEmpty) {
+                    return const Center(
+                      child: CupertinoActivityIndicator(
+                        color: AppColors.lime,
+                      ),
+                    );
+                  }
+
+                  if (state.tracks.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            CupertinoIcons.music_note_2,
+                            size: 64.sp,
+                            color: AppColors.textSecondary,
+                          ),
+                          SizedBox(height: 16.h),
+                          Text(
+                            'there is no saved songs',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 18.sp,
+                            ),
+                          ),
+                          SizedBox(height: 8.h),
+                          Text(
+                            'choose a song from the files and it will be saved here',
+                            style: TextStyle(
+                              color: AppColors.textSecondary
+                                  .withValues(alpha: 0.6),
+                              fontSize: 14.sp,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
+                      16.w,
+                      0,
+                      16.w,
+                      bottomInset,
+                    ),
+                    itemCount: state.tracks.length,
+                    itemBuilder: (context, index) {
+                      final track = state.tracks[index];
+                      return _AudioTile(track: track);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -105,7 +149,6 @@ class _AudioTile extends StatelessWidget {
         return Dismissible(
           key: ValueKey(track.id),
           direction: DismissDirection.endToStart,
-
           background: Container(
             alignment: Alignment.centerRight,
             padding: EdgeInsets.only(right: 20.w),
@@ -120,39 +163,29 @@ class _AudioTile extends StatelessWidget {
               size: 24.sp,
             ),
           ),
-
           onDismissed: (_) {
             context.read<PlayerCubit>().deleteTrack(track);
           },
-
           child: GestureDetector(
             onTap: () async {
               await context.read<PlayerCubit>().playTrack(track);
             },
-
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOutCubic,
-
               margin: EdgeInsets.only(bottom: 8.h),
-
               padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
-
               decoration: BoxDecoration(
                 color: isPlaying
                     ? AppColors.lime.withValues(alpha: 0.08)
                     : AppColors.surface,
-
                 borderRadius: BorderRadius.circular(12),
-
                 border: Border.all(
                   color: isPlaying
                       ? AppColors.lime.withValues(alpha: 0.55)
                       : AppColors.textSecondary.withValues(alpha: 0.1),
-
                   width: isPlaying ? 1.2 : 1,
                 ),
-
                 boxShadow: isPlaying
                     ? [
                         BoxShadow(
@@ -163,29 +196,23 @@ class _AudioTile extends StatelessWidget {
                       ]
                     : null,
               ),
-
               child: Row(
                 children: [
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-
                     width: 44.w,
                     height: 44.w,
-
                     decoration: BoxDecoration(
                       color: isPlaying
                           ? AppColors.lime.withValues(alpha: 0.2)
                           : AppColors.lime.withValues(alpha: 0.15),
-
                       borderRadius: BorderRadius.circular(10),
-
                       border: isPlaying
                           ? Border.all(
                               color: AppColors.lime.withValues(alpha: 0.4),
                             )
                           : null,
                     ),
-
                     child: isPlaying
                         ? const _PlayingIndicator()
                         : Icon(
@@ -194,23 +221,11 @@ class _AudioTile extends StatelessWidget {
                             size: 20.sp,
                           ),
                   ),
-
                   SizedBox(width: 12.w),
-
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          height: 38.h, 
-                          width: 350.w,
-                          child: GlassTextField(
-                            placeholder: 'Search songs...',
-                            prefixIcon: CupertinoIcons.search,
-                            suffixIcon: CupertinoIcons.xmark_circle_fill,
-                            onChanged: (value) => print(value),
-                          ),
-                        ),
                         Text(
                           track.title,
                           style: TextStyle(
@@ -223,12 +238,9 @@ class _AudioTile extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-
                         SizedBox(height: 4.h),
-
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 250),
-
                           child: isPlaying
                               ? Row(
                                   key: const ValueKey('playing'),
@@ -266,10 +278,8 @@ class _AudioTile extends StatelessWidget {
                       ],
                     ),
                   ),
-
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 250),
-
                     child: isPlaying
                         ? Icon(
                             CupertinoIcons.waveform,
@@ -308,7 +318,6 @@ class _PlayingIndicatorState extends State<_PlayingIndicator>
   @override
   void initState() {
     super.initState();
-
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
@@ -327,7 +336,6 @@ class _PlayingIndicatorState extends State<_PlayingIndicator>
       animation: _controller,
       builder: (context, child) {
         final value = _controller.value;
-
         final heights = [
           8 + (10 * _wave(value)),
           14 + (12 * _wave(value + 0.25)),
@@ -359,11 +367,9 @@ class _PlayingIndicatorState extends State<_PlayingIndicator>
 
   double _wave(double value) {
     final normalized = value % 1.0;
-
     if (normalized < 0.5) {
       return normalized * 2;
     }
-
     return 2 - (normalized * 2);
   }
 }
