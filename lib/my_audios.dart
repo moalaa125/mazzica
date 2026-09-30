@@ -7,6 +7,7 @@ import 'package:mazzica/cubits/audio_library_state.dart';
 import 'package:mazzica/cubits/player_cubit.dart';
 import 'package:mazzica/cubits/player_state.dart';
 import 'package:mazzica/models/audio_track.dart';
+import 'package:mazzica/widgets/custom_text_filed.dart';
 
 class MyAudios extends StatelessWidget {
   const MyAudios({super.key});
@@ -20,12 +21,15 @@ class MyAudios extends StatelessWidget {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.transparent,
       navigationBar: CupertinoNavigationBar(
-        middle: Text(
-          'Your Audios',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18.sp,
-          ),
+        automaticBackgroundVisibility: true,
+        enableBackgroundFilterBlur: true,
+        middle: Column(
+          children: [
+            Text(
+              'Your Audios',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 18.sp),
+            ),
+          ],
         ),
         backgroundColor: AppColors.surface.withValues(alpha: 0.8),
       ),
@@ -36,9 +40,7 @@ class MyAudios extends StatelessWidget {
             if (state.status == AudioLibraryStatus.loading &&
                 state.tracks.isEmpty) {
               return const Center(
-                child: CupertinoActivityIndicator(
-                  color: AppColors.lime,
-                ),
+                child: CupertinoActivityIndicator(color: AppColors.lime),
               );
             }
 
@@ -47,6 +49,13 @@ class MyAudios extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    GlassTextField(
+                      placeholder: 'Search songs...',
+                      prefixIcon: CupertinoIcons.search,
+                      suffixIcon: CupertinoIcons.xmark_circle_fill,
+                      // onSuffixTap: () => _controller.clear(),
+                      onChanged: (value) => print(value),
+                    ),
                     Icon(
                       CupertinoIcons.music_note_2,
                       size: 64.sp,
@@ -75,19 +84,12 @@ class MyAudios extends StatelessWidget {
 
             return ListView.builder(
               physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                16.w,
-                12.h,
-                16.w,
-                bottomInset,
-              ),
+              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, bottomInset),
               itemCount: state.tracks.length,
               itemBuilder: (context, index) {
                 final track = state.tracks[index];
 
-                return _AudioTile(
-                  track: track,
-                );
+                return _AudioTile(track: track);
               },
             );
           },
@@ -98,9 +100,7 @@ class MyAudios extends StatelessWidget {
 }
 
 class _AudioTile extends StatelessWidget {
-  const _AudioTile({
-    required this.track,
-  });
+  const _AudioTile({required this.track});
 
   final AudioTrack track;
 
@@ -148,10 +148,7 @@ class _AudioTile extends StatelessWidget {
 
               margin: EdgeInsets.only(bottom: 8.h),
 
-              padding: EdgeInsets.symmetric(
-                horizontal: 16.w,
-                vertical: 14.h,
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
 
               decoration: BoxDecoration(
                 color: isPlaying
