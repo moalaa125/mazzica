@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mazzica/constants/app_color.dart';
+import 'package:mazzica/explore_screen.dart';
+import 'package:mazzica/local_files_screen.dart';
 import 'package:mazzica/my_audios.dart';
 import 'package:mazzica/widgets/player/sliding_player_overlay.dart';
 
@@ -18,37 +20,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTabContent() {
     switch (_tab) {
       case 0:
-        return _buildPlaceholder(
-          'Explore & New Releases',
-          CupertinoIcons.compass,
-        );
+        return const ExploreScreen();
       case 1:
         return const MyAudios();
       case 2:
-        return _buildPlaceholder('Local Files', CupertinoIcons.folder);
+        return const LocalFilesScreen();
+
       default:
         return const SizedBox.shrink();
     }
-  }
-
-  Widget _buildPlaceholder(String title, IconData icon) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 64.sp, color: AppColors.lime.withValues(alpha: 0.6)),
-          SizedBox(height: 16.h),
-          Text(
-            title,
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18.sp,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -97,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         selectedIndex: _tab,
       ),
-      statusBarStyle: GlassStatusBarStyle.auto,
+      statusBarStyle: GlassStatusBarStyle.light,
     );
   }
 }
