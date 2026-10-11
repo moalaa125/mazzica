@@ -25,7 +25,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   double _pageProgress = 0.0;
   bool _canGoBack = false;
   bool _canGoForward = false;
-  String? _currentVideoUrl;
 
   final String _initialUrl = 'https://m.youtube.com';
 
@@ -44,8 +43,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
       useHybridComposition: true,
       transparentBackground: true,
       supportZoom: true,
-      // 🔥 منع نظام iOS وأندرويد من تحويل الروابط للتطبيقات الخارجية
-      applicationNameForUserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+      // منع الخروج لتطبيق يوتيوب الخارجي عبر محاكاة متصفح Safari للجوال
+      applicationNameForUserAgent:
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
     );
   }
 
@@ -73,26 +73,60 @@ class _ExploreScreenState extends State<ExploreScreen> {
       final canGoBack = await _webViewController!.canGoBack();
       final canGoForward = await _webViewController!.canGoForward();
 
-      final urlString = url?.toString() ?? '';
-      _urlController.text = urlString;
-
-      // فحص ما إذا كانت الصفحة الحالية فيديو يوتيوب
-      final isYouTubeVideo = urlString.contains('watch?v=') || urlString.contains('youtu.be/');
+      if (url != null) {
+        _urlController.text = url.toString();
+      }
 
       if (mounted) {
         setState(() {
           _canGoBack = canGoBack;
           _canGoForward = canGoForward;
-          _currentVideoUrl = isYouTubeVideo ? urlString : null;
         });
       }
     }
   }
 
-  // تنزيل تيار الصوت من يوتيوب وحفظه في التطبيق
+  // عند الضغط على زر التنزيل في الشريط العلوي
+  Future<void> _handleDownloadCurrentPage() async {
+    final currentUrl = (await _webViewController?.getUrl())?.toString();
+
+    if (currentUrl == null || currentUrl.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No webpage loaded!')),
+        );
+      }
+      return;
+    }
+
+    // التحقق من أن الرابط هو فيديو يوتيوب أو شورتس
+    final isYouTubeVideo = currentUrl.contains('watch?v=') ||
+        currentUrl.contains('youtu.be/') ||
+        currentUrl.contains('/shorts/');
+
+    if (!isYouTubeVideo) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppColors.surface,
+            content: Text(
+              'Please open a YouTube video or music first to download!',
+              style: TextStyle(color: AppColors.coral),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // بدء تنزيل الصوت
+    _downloadYouTubeAudio(currentUrl);
+  }
+
+  // استخراج تيار الصوت وتنزيله وحفظه
   Future<void> _downloadYouTubeAudio(String videoUrl) async {
     final progressNotifier = ValueNotifier<double>(0.0);
-    final statusText = ValueNotifier<String>('Fetching audio stream...');
+    final statusText = ValueNotifier<String>('Connecting to video...');
 
     showDialog(
       context: context,
@@ -127,13 +161,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
 
     try {
+      statusText.value = 'Fetching audio stream...';
       final video = await _yt.videos.get(videoUrl);
       final manifest = await _yt.videos.streamsClient.getManifest(video.id);
 
-      // اختيار تيار الصوت فقط بأعلى جودة
+      // استخراج أفضل جودة صوت فقط
       final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
 
-      final cleanTitle = video.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+      final cleanTitle =
+          video.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
       final tempDir = await getTemporaryDirectory();
       final tempFilePath = p.join(tempDir.path, '$cleanTitle.m4a');
       final tempFile = File(tempFilePath);
@@ -152,7 +188,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
         downloadedBytes += data.length;
         output.add(data);
         progressNotifier.value = downloadedBytes / totalBytes;
-        statusText.value = '${(progressNotifier.value * 100).toInt()}% downloaded';
+        statusText.value =
+            '${(progressNotifier.value * 100).toInt()}% downloaded';
       }
 
       await output.flush();
@@ -160,7 +197,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
       if (mounted) Navigator.pop(context); // إغلاق الدايالوج
 
-      // حفظ المقطع فوراً في مكتبة الموسيقى داخل التطبيق
+      // حفظ المقطع داخل التطبيق ومكتبة الموسيقى
       if (mounted) {
         await context.read<AudioLibraryCubit>().saveTrack(
               sourcePath: tempFilePath,
@@ -206,95 +243,58 @@ class _ExploreScreenState extends State<ExploreScreen> {
       backgroundColor: AppColors.bg,
       child: SafeArea(
         bottom: false,
-        child: Stack(
+        child: Column(
           children: [
-            Column(
-              children: [
-                _buildTopBar(),
-                if (_pageProgress < 1.0)
-                  LinearProgressIndicator(
-                    value: _pageProgress,
-                    backgroundColor: AppColors.surface,
-                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
-                    minHeight: 2.h,
-                  ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: bottomInset),
-                    child: InAppWebView(
-                      initialUrlRequest: URLRequest(url: WebUri(_initialUrl)),
-                      initialSettings: _settings,
-                      onWebViewCreated: (controller) {
-                        _webViewController = controller;
-                      },
-                      onLoadStart: (controller, url) => _updateNavState(url),
-                      onLoadStop: (controller, url) => _updateNavState(url),
-                      onProgressChanged: (controller, progress) {
-                        setState(() {
-                          _pageProgress = progress / 100;
-                        });
-                      },
-                      // 🔥 السطر السحري: منع فتح تطبيق يوتيوب الخارجي وإبقائه داخل التطبيق دائماً
-                      shouldOverrideUrlLoading: (controller, navigationAction) async {
-                        final uri = navigationAction.request.url;
-                        if (uri == null) return NavigationActionPolicy.CANCEL;
+            // الشريط العلوي مع زر التحميل
+            _buildTopBar(),
 
-                        final scheme = uri.scheme.toLowerCase();
-                        if (scheme != 'http' && scheme != 'https') {
-                          // منع intent:// أو vnd.youtube://
-                          return NavigationActionPolicy.CANCEL;
-                        }
+            // مؤشر تحميل الصفحة
+            if (_pageProgress < 1.0)
+              LinearProgressIndicator(
+                value: _pageProgress,
+                backgroundColor: AppColors.surface,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
+                minHeight: 2.h,
+              ),
 
-                        return NavigationActionPolicy.ALLOW;
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            // المتصفح
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomInset),
+                child: InAppWebView(
+                  initialUrlRequest: URLRequest(url: WebUri(_initialUrl)),
+                  initialSettings: _settings,
+                  onWebViewCreated: (controller) {
+                    _webViewController = controller;
+                  },
+                  onLoadStart: (controller, url) => _updateNavState(url),
+                  onLoadStop: (controller, url) => _updateNavState(url),
+                  onUpdateVisitedHistory: (controller, url, isReload) {
+                    if (url != null) {
+                      _updateNavState(url);
+                    }
+                  },
+                  onProgressChanged: (controller, progress) {
+                    setState(() {
+                      _pageProgress = progress / 100;
+                    });
+                  },
+                  // منع الخروج من التطبيق لأي رابط خارجي
+                  shouldOverrideUrlLoading:
+                      (controller, navigationAction) async {
+                    final uri = navigationAction.request.url;
+                    if (uri == null) return NavigationActionPolicy.CANCEL;
 
-            // 🔥 زر التنزيل العائم: يظهر فقط عند فتح أي فيديو على يوتيوب
-            if (_currentVideoUrl != null)
-              Positioned(
-                bottom: bottomInset + 16.h,
-                right: 16.w,
-                child: GestureDetector(
-                  onTap: () => _downloadYouTubeAudio(_currentVideoUrl!),
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                    decoration: BoxDecoration(
-                      color: AppColors.lime,
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.lime.withValues(alpha: 0.4),
-                          blurRadius: 16,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          CupertinoIcons.arrow_down_to_line_alt,
-                          color: AppColors.bg,
-                          size: 20,
-                        ),
-                        SizedBox(width: 8.w),
-                        Text(
-                          'Save Audio',
-                          style: TextStyle(
-                            color: AppColors.bg,
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                    final scheme = uri.scheme.toLowerCase();
+                    if (scheme != 'http' && scheme != 'https') {
+                      return NavigationActionPolicy.CANCEL;
+                    }
+
+                    return NavigationActionPolicy.ALLOW;
+                  },
                 ),
               ),
+            ),
           ],
         ),
       ),
@@ -315,25 +315,36 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ),
       child: Row(
         children: [
+          // زر الرجوع
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: _canGoBack ? () => _webViewController?.goBack() : null,
             child: Icon(
               CupertinoIcons.back,
-              color: _canGoBack ? AppColors.lime : AppColors.textSecondary.withValues(alpha: 0.3),
+              color: _canGoBack
+                  ? AppColors.lime
+                  : AppColors.textSecondary.withValues(alpha: 0.3),
               size: 22.sp,
             ),
           ),
+
+          // زر التقدم
           CupertinoButton(
             padding: EdgeInsets.zero,
-            onPressed: _canGoForward ? () => _webViewController?.goForward() : null,
+            onPressed:
+                _canGoForward ? () => _webViewController?.goForward() : null,
             child: Icon(
               CupertinoIcons.forward,
-              color: _canGoForward ? AppColors.lime : AppColors.textSecondary.withValues(alpha: 0.3),
+              color: _canGoForward
+                  ? AppColors.lime
+                  : AppColors.textSecondary.withValues(alpha: 0.3),
               size: 22.sp,
             ),
           ),
+
           SizedBox(width: 4.w),
+
+          // شريط العنوان والبحث
           Expanded(
             child: Container(
               height: 36.h,
@@ -351,7 +362,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   color: AppColors.textSecondary.withValues(alpha: 0.5),
                   fontSize: 13.sp,
                 ),
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 13.sp),
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13.sp,
+                ),
                 cursorColor: AppColors.lime,
                 padding: EdgeInsets.symmetric(horizontal: 10.w),
                 decoration: const BoxDecoration(color: Colors.transparent),
@@ -368,7 +382,28 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
             ),
           ),
+
           SizedBox(width: 4.w),
+
+          // 🔥 زر التنزيل الدائم في الشريط العلوي
+          CupertinoButton(
+            padding: EdgeInsets.symmetric(horizontal: 6.w),
+            onPressed: _handleDownloadCurrentPage,
+            child: Container(
+              padding: EdgeInsets.all(6.w),
+              decoration: BoxDecoration(
+                color: AppColors.lime.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                CupertinoIcons.arrow_down_to_line,
+                color: AppColors.lime,
+                size: 18,
+              ),
+            ),
+          ),
+
+          // زر التحديث
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: () => _webViewController?.reload(),
