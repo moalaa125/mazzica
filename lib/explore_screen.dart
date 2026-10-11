@@ -1,4 +1,7 @@
+
+import 'dart:async';
 import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -26,6 +29,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   double _pageProgress = 0.0;
   bool _canGoBack = false;
   bool _canGoForward = false;
+  bool _isDownloading = false;
 
   final String _initialUrl = 'https://m.youtube.com';
 
@@ -34,6 +38,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   @override
   void initState() {
     super.initState();
+
     _urlController.text = _initialUrl;
 
     _settings = InAppWebViewSettings(
@@ -44,12 +49,29 @@ class _ExploreScreenState extends State<ExploreScreen> {
       transparentBackground: true,
       supportZoom: true,
       applicationNameForUserAgent:
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) '
+          'AppleWebKit/605.1.15 (KHTML, like Gecko) '
+          'Version/16.0 Mobile/15E148 Safari/604.1',
+    );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.surface,
+        content: Text(
+          message,
+          style: const TextStyle(color: AppColors.lime),
+        ),
+      ),
     );
   }
 
   void _loadUrl(String input) {
     String formattedUrl = input.trim();
+
     if (formattedUrl.isEmpty) return;
 
     if (!formattedUrl.startsWith('http://') &&
@@ -68,165 +90,269 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Future<void> _updateNavState(WebUri? url) async {
-    if (_webViewController != null) {
-      final canGoBack = await _webViewController!.canGoBack();
-      final canGoForward = await _webViewController!.canGoForward();
+    final controller = _webViewController;
+
+    if (controller == null) return;
+
+    try {
+      final canGoBack = await controller.canGoBack();
+      final canGoForward = await controller.canGoForward();
 
       if (url != null) {
         _urlController.text = url.toString();
       }
 
-      if (mounted) {
-        setState(() {
-          _canGoBack = canGoBack;
-          _canGoForward = canGoForward;
-        });
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _canGoBack = canGoBack;
+        _canGoForward = canGoForward;
+      });
+    } catch (e) {
+      debugPrint('Navigation state error: $e');
     }
   }
 
   Future<void> _handleDownloadCurrentPage() async {
-    final currentUrl = (await _webViewController?.getUrl())?.toString();
+    if (_isDownloading) return;
+
+    final currentUrl =
+        (await _webViewController?.getUrl())?.toString();
 
     if (currentUrl == null || currentUrl.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('No webpage loaded!')));
-      }
+      _showMessage('No webpage loaded.');
       return;
     }
 
-    final isYouTubeVideo =
-        currentUrl.contains('watch?v=') ||
-        currentUrl.contains('youtu.be/') ||
-        currentUrl.contains('/shorts/');
+    final uri = Uri.tryParse(currentUrl);
+
+    if (uri == null) {
+      _showMessage('Invalid webpage URL.');
+      return;
+    }
+
+    final host = uri.host.toLowerCase();
+    final isYouTubeHost =
+        host == 'youtube.com' ||
+        host.endsWith('.youtube.com') ||
+        host == 'youtu.be';
+
+    final isYouTubeVideo = isYouTubeHost &&
+        (uri.path == '/watch' && uri.queryParameters.containsKey('v') ||
+            uri.path.startsWith('/shorts/') ||
+            host == 'youtu.be' && uri.pathSegments.isNotEmpty);
 
     if (!isYouTubeVideo) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: AppColors.surface,
-            content: Text(
-              'Please open a YouTube video or music first to download!',
-              style: TextStyle(color: AppColors.coral),
-            ),
-          ),
-        );
-      }
+      _showMessage('Please open a YouTube video first.');
       return;
     }
 
-    _downloadAudio(currentUrl);
+    await _downloadAudio(currentUrl);
   }
 
   Future<void> _downloadAudio(String rawUrl) async {
+    if (_isDownloading || !mounted) return;
+
+    _isDownloading = true;
+
     final progressNotifier = ValueNotifier<double>(0.0);
-    final statusText = ValueNotifier<String>('Getting track info...');
+    final statusText =
+        ValueNotifier<String>('Getting track information...');
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Downloading Track'),
-        content: Column(
-          children: [
-            SizedBox(height: 14.h),
-            ValueListenableBuilder<double>(
-              valueListenable: progressNotifier,
-              builder: (_, progress, __) => LinearProgressIndicator(
-                value: progress > 0 ? progress : null,
-                valueColor: const AlwaysStoppedAnimation(AppColors.lime),
-                backgroundColor: AppColors.surface,
-              ),
-            ),
-            SizedBox(height: 8.h),
-            ValueListenableBuilder<String>(
-              valueListenable: statusText,
-              builder: (_, text, __) => Text(
-                text,
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12.sp,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    var dialogOpen = false;
+    var dialogClosed = false;
+    var savedSuccessfully = false;
+    String? tempFilePath;
+    YoutubeExplode? yt;
 
-    final yt = YoutubeExplode();
+    void closeDialog() {
+      if (!dialogOpen || dialogClosed || !mounted) return;
+
+      dialogClosed = true;
+      Navigator.of(context, rootNavigator: true).pop();
+    }
 
     try {
+      showCupertinoDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          dialogOpen = true;
+
+          return CupertinoAlertDialog(
+            title: const Text('Downloading Track'),
+            content: Column(
+              children: [
+                SizedBox(height: 14.h),
+                ValueListenableBuilder<double>(
+                  valueListenable: progressNotifier,
+                  builder: (_, progress, __) {
+                    return Column(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 5,
+                            backgroundColor: AppColors.surface,
+                            valueColor:
+                                const AlwaysStoppedAnimation<Color>(
+                              AppColors.lime,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 8.h),
+                        Text(
+                          '${(progress * 100).toInt()}%',
+                          style: TextStyle(
+                            color: AppColors.lime,
+                            fontSize: 12.sp,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                SizedBox(height: 8.h),
+                ValueListenableBuilder<String>(
+                  valueListenable: statusText,
+                  builder: (_, text, __) {
+                    return Text(
+                      text,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12.sp,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      yt = YoutubeExplode();
+
       final videoId = VideoId(rawUrl);
 
-      final video = await yt.videos
-          .get(videoId)
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => throw 'Could not connect to YouTube.',
-          );
+      statusText.value = 'Getting video information...';
+
+      final video = await yt.videos.get(videoId).timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw TimeoutException(
+          'Timed out while getting video information.',
+        ),
+      );
 
       final trackTitle = video.title.trim().isEmpty
           ? 'YouTube Audio'
           : video.title.trim();
 
-      statusText.value = 'Extracting audio streams...';
+      statusText.value = 'Finding audio stream...';
 
-      final manifest = await yt.videos.streamsClient.getManifest(videoId);
+      final manifest =
+          await yt.videos.streamsClient.getManifest(videoId).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw TimeoutException(
+          'Timed out while finding audio streams.',
+        ),
+      );
 
-      // ✅ خذ AAC/MP4 فقط — المتوافق مع iOS و Android
-      // (webm/opus لا يعمل على iOS أبداً حتى لو غيّرنا الامتداد)
-      final audioStreamInfo = manifest.audioOnly
-          .where((s) => s.container == StreamContainer.mp4)
-          .sortByBitrate()
-          .firstOrNull;
+      // Prefer MP4 audio streams for compatibility with common players.
+      // Fall back to another audio-only stream if MP4 is unavailable.
+      final audioStreams = manifest.audioOnly.toList();
 
-      if (audioStreamInfo == null) {
-        throw 'No compatible audio stream (AAC) found for this video.';
+      if (audioStreams.isEmpty) {
+        throw Exception('No audio-only stream is available.');
       }
 
-      statusText.value = 'Downloading audio file...';
+      final mp4Streams = audioStreams
+          .where((stream) => stream.container == StreamContainer.mp4)
+          .toList()
+        ..sort((a, b) => b.bitrate.compareTo(a.bitrate));
+
+      audioStreams.sort((a, b) => b.bitrate.compareTo(a.bitrate));
+
+      final audioStreamInfo =
+          mp4Streams.isNotEmpty ? mp4Streams.first : audioStreams.first;
+
+      statusText.value = 'Preparing audio file...';
 
       final tempDir = await getTemporaryDirectory();
 
-      // ✅ استخدم الامتداد الحقيقي للحاوية بدل hardcode لـ m4a
-      final extension = audioStreamInfo.container.name; // 'mp4'
-      final tempFilePath = p.join(
+      final extension = audioStreamInfo.container.name;
+
+      tempFilePath = p.join(
         tempDir.path,
         'audio_${DateTime.now().microsecondsSinceEpoch}.$extension',
       );
 
       final file = File(tempFilePath);
       final sink = file.openWrite();
+
       final totalBytes = audioStreamInfo.size.totalBytes;
       var receivedBytes = 0;
+      var lastProgressUpdate = DateTime.now();
 
-      final stream = yt.videos.streamsClient.get(audioStreamInfo);
-      await for (final chunk in stream) {
-        sink.add(chunk);
-        receivedBytes += chunk.length;
-        if (totalBytes > 0) {
-          progressNotifier.value = (receivedBytes / totalBytes).clamp(0.0, 1.0);
-          statusText.value =
-              '${(progressNotifier.value * 100).toInt()}% downloaded';
-        } else {
-          statusText.value =
-              'Downloaded ${(receivedBytes / (1024 * 1024)).toStringAsFixed(1)} MB...';
+      statusText.value = 'Connecting to audio stream...';
+
+      try {
+        final stream = yt.videos.streamsClient
+            .get(audioStreamInfo)
+            .timeout(
+          const Duration(seconds: 30),
+          onTimeout: (eventSink) {
+            eventSink.addError(
+              TimeoutException(
+                'No audio data received for 30 seconds.',
+              ),
+            );
+          },
+        );
+
+        await for (final chunk in stream) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+          lastProgressUpdate = DateTime.now();
+
+          if (totalBytes > 0) {
+            final progress =
+                (receivedBytes / totalBytes).clamp(0.0, 1.0);
+
+            progressNotifier.value = progress;
+
+            statusText.value =
+                '${(progress * 100).toInt()}% downloaded '
+                '(${(receivedBytes / (1024 * 1024)).toStringAsFixed(1)} MB)';
+          } else {
+            statusText.value =
+                'Downloaded ${(receivedBytes / (1024 * 1024)).toStringAsFixed(1)} MB...';
+          }
         }
-      }
-      await sink.flush();
-      await sink.close();
 
-      // ✅ رفض الملفات الناقصة حتى لا تُحفظ في المكتبة ملفات تالفة
-      if (receivedBytes < totalBytes) {
-        if (await file.exists()) {
-          await file.delete();
-        }
-        throw 'Download incomplete. Please try again.';
+        await sink.flush();
+      } finally {
+        await sink.close();
       }
 
+      debugPrint(
+        'Audio stream completed. '
+        'Bytes: $receivedBytes / $totalBytes. '
+        'Last update: $lastProgressUpdate',
+      );
+
+      if (receivedBytes == 0) {
+        throw Exception('No audio data was received.');
+      }
+
+      if (totalBytes > 0 && receivedBytes < totalBytes) {
+        throw Exception(
+          'Download incomplete: received $receivedBytes of $totalBytes bytes.',
+        );
+      }
+
+      progressNotifier.value = 1.0;
       statusText.value = 'Saving to your music library...';
 
       await context.read<AudioLibraryCubit>().saveTrack(
@@ -236,69 +362,86 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
       await context.read<AudioLibraryCubit>().loadTracks();
 
-      final tempFile = File(tempFilePath);
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
+      savedSuccessfully = true;
+
+      closeDialog();
+
+      _showMessage('Saved "$trackTitle" to My Audios!');
+    } on DioException catch (e, stackTrace) {
+      debugPrint('Download DioException: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
+      closeDialog();
+
+      final message = e.response?.statusCode == 403
+          ? 'The audio stream was blocked (403). Please retry later.'
+          : 'Download failed. Check your connection and try again.';
 
       if (mounted) {
-        Navigator.pop(context);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.surface,
-            duration: const Duration(seconds: 4),
-            content: Text(
-              'Saved "$trackTitle" to My Audios! 🎉',
-              style: const TextStyle(color: AppColors.lime),
-            ),
-          ),
-        );
-      }
-    } on DioException catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        final msg = e.response?.statusCode == 403
-            ? 'YouTube blocked this stream (403). Try another video or retry later.'
-            : 'Download failed. Please check your connection and try again.';
-        showCupertinoDialog(
+        await showCupertinoDialog<void>(
           context: context,
-          builder: (ctx) => CupertinoAlertDialog(
+          builder: (dialogContext) => CupertinoAlertDialog(
             title: const Text('Download Notice'),
-            content: Text(msg),
+            content: Text(message),
             actions: [
               CupertinoDialogAction(
                 child: const Text('OK'),
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: () => Navigator.pop(dialogContext),
               ),
             ],
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Download error: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
+      closeDialog();
+
+      final message = e is TimeoutException
+          ? 'The download timed out because no data arrived. Please retry.'
+          : e.toString().contains('403')
+              ? 'The audio stream was blocked (403). Please retry later.'
+              : 'Download failed: ${e.toString()}';
+
       if (mounted) {
-        Navigator.pop(context);
-
-        final cleanMsg = e.toString().contains('403')
-            ? 'YouTube blocked this stream (403). Try another video or retry later.'
-            : 'Download failed. Please try again.';
-
-        showCupertinoDialog(
+        await showCupertinoDialog<void>(
           context: context,
-          builder: (ctx) => CupertinoAlertDialog(
+          builder: (dialogContext) => CupertinoAlertDialog(
             title: const Text('Download Notice'),
-            content: Text(cleanMsg),
+            content: Text(message),
             actions: [
               CupertinoDialogAction(
                 child: const Text('OK'),
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: () => Navigator.pop(dialogContext),
               ),
             ],
           ),
         );
       }
     } finally {
-      yt.close();
+      yt?.close();
+
+      if (!savedSuccessfully && tempFilePath != null) {
+        try {
+          final tempFile = File(tempFilePath);
+
+          if (await tempFile.exists()) {
+            await tempFile.delete();
+          }
+        } catch (e) {
+          debugPrint('Temporary file cleanup failed: $e');
+        }
+      }
+
+      if (dialogOpen && !dialogClosed && mounted) {
+        closeDialog();
+      }
+
+      progressNotifier.dispose();
+      statusText.dispose();
+
+      _isDownloading = false;
     }
   }
 
@@ -324,42 +467,56 @@ class _ExploreScreenState extends State<ExploreScreen> {
               LinearProgressIndicator(
                 value: _pageProgress,
                 backgroundColor: AppColors.surface,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.lime),
                 minHeight: 2.h,
               ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.only(bottom: bottomInset),
                 child: InAppWebView(
-                  initialUrlRequest: URLRequest(url: WebUri(_initialUrl)),
+                  initialUrlRequest: URLRequest(
+                    url: WebUri(_initialUrl),
+                  ),
                   initialSettings: _settings,
                   onWebViewCreated: (controller) {
                     _webViewController = controller;
                   },
-                  onLoadStart: (controller, url) => _updateNavState(url),
-                  onLoadStop: (controller, url) => _updateNavState(url),
-                  onUpdateVisitedHistory: (controller, url, isReload) {
+                  onLoadStart: (controller, url) {
+                    _updateNavState(url);
+                  },
+                  onLoadStop: (controller, url) {
+                    _updateNavState(url);
+                  },
+                  onUpdateVisitedHistory:
+                      (controller, url, isReload) {
                     if (url != null) {
                       _updateNavState(url);
                     }
                   },
                   onProgressChanged: (controller, progress) {
+                    if (!mounted) return;
+
                     setState(() {
                       _pageProgress = progress / 100;
                     });
                   },
                   shouldOverrideUrlLoading:
                       (controller, navigationAction) async {
-                        final uri = navigationAction.request.url;
-                        if (uri == null) return NavigationActionPolicy.CANCEL;
+                    final uri = navigationAction.request.url;
 
-                        final scheme = uri.scheme.toLowerCase();
-                        if (scheme != 'http' && scheme != 'https') {
-                          return NavigationActionPolicy.CANCEL;
-                        }
+                    if (uri == null) {
+                      return NavigationActionPolicy.CANCEL;
+                    }
 
-                        return NavigationActionPolicy.ALLOW;
-                      },
+                    final scheme = uri.scheme.toLowerCase();
+
+                    if (scheme != 'http' && scheme != 'https') {
+                      return NavigationActionPolicy.CANCEL;
+                    }
+
+                    return NavigationActionPolicy.ALLOW;
+                  },
                 ),
               ),
             ),
@@ -371,7 +528,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Widget _buildTopBar() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
+      padding: EdgeInsets.symmetric(
+        horizontal: 8.w,
+        vertical: 8.h,
+      ),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(
@@ -385,7 +545,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
         children: [
           CupertinoButton(
             padding: EdgeInsets.zero,
-            onPressed: _canGoBack ? () => _webViewController?.goBack() : null,
+            onPressed: _canGoBack
+                ? () => _webViewController?.goBack()
+                : null,
             child: Icon(
               CupertinoIcons.back,
               color: _canGoBack
@@ -425,10 +587,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   color: AppColors.textSecondary.withValues(alpha: 0.5),
                   fontSize: 13.sp,
                 ),
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 13.sp),
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13.sp,
+                ),
                 cursorColor: AppColors.lime,
                 padding: EdgeInsets.symmetric(horizontal: 10.w),
-                decoration: const BoxDecoration(color: Colors.transparent),
+                decoration: const BoxDecoration(
+                  color: Colors.transparent,
+                ),
                 textInputAction: TextInputAction.go,
                 onSubmitted: _loadUrl,
                 prefix: Padding(
@@ -445,7 +612,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
           SizedBox(width: 4.w),
           CupertinoButton(
             padding: EdgeInsets.symmetric(horizontal: 6.w),
-            onPressed: _handleDownloadCurrentPage,
+            onPressed:
+                _isDownloading ? null : _handleDownloadCurrentPage,
             child: Container(
               padding: EdgeInsets.all(6.w),
               decoration: BoxDecoration(
