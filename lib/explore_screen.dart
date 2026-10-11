@@ -92,14 +92,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
     if (currentUrl == null || currentUrl.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No webpage loaded!')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No webpage loaded!')));
       }
       return;
     }
 
-    final isYouTubeVideo = currentUrl.contains('watch?v=') ||
+    final isYouTubeVideo =
+        currentUrl.contains('watch?v=') ||
         currentUrl.contains('youtu.be/') ||
         currentUrl.contains('/shorts/');
 
@@ -163,86 +164,122 @@ class _ExploreScreenState extends State<ExploreScreen> {
     try {
       final videoId = VideoId(rawUrl);
 
-      // جلب عنوان الفيديو بسرعة
-      final video = await yt.videos.get(videoId).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw 'Could not connect to YouTube.',
-      );
+      // جلب عنوان وتفاصيل الفيديو
+      final video = await yt.videos
+          .get(videoId)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw 'Could not connect to YouTube.',
+          );
 
-      final trackTitle =
-          video.title.trim().isEmpty ? 'YouTube Audio' : video.title.trim();
+      final trackTitle = video.title.trim().isEmpty
+          ? 'YouTube Audio'
+          : video.title.trim();
 
-      statusText.value = 'Connecting to high-speed stream...';
+      statusText.value = 'Bypassing YouTube restrictions...';
 
       final tempDir = await getTemporaryDirectory();
-      final tempFilePath =
-          p.join(tempDir.path, 'audio_${DateTime.now().microsecondsSinceEpoch}.m4a');
+      final tempFilePath = p.join(
+        tempDir.path,
+        'audio_${DateTime.now().microsecondsSinceEpoch}.m4a',
+      );
 
-      String? downloadStreamUrl;
+      String? audioDownloadUrl;
 
-      // 1. محاولة جلب رابط تنزيل سريع ومفتوح لا يخضع لقيود سرعة يوتيوب
-      try {
-        final apiResponse = await _dio.post(
-          'https://api.cobalt.tools/api/json',
-          options: Options(
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-            },
-          ),
-          data: jsonEncode({
-            'url': 'https://www.youtube.com/watch?v=${videoId.value}',
-            'isAudioOnly': true,
-            'aFormat': 'mp3',
-          }),
-        ).timeout(const Duration(seconds: 8));
+      // 🔥 الحل السحري لتفادي 403: استخدام خوادم Piped المجانية المفتوحة
+      final pipedInstances = [
+        'https://pipedapi.kavin.rocks',
+        'https://api.piped.privacydev.net',
+        'https://piped-api.lunar.icu',
+      ];
 
-        if (apiResponse.statusCode == 200 && apiResponse.data['url'] != null) {
-          downloadStreamUrl = apiResponse.data['url'];
+      for (final instance in pipedInstances) {
+        try {
+          final res = await _dio
+              .get(
+                '$instance/streams/${videoId.value}',
+                options: Options(
+                  headers: {'Accept': 'application/json'},
+                  responseType: ResponseType.json,
+                ),
+              )
+              .timeout(const Duration(seconds: 5));
+
+          if (res.statusCode == 200 && res.data['audioStreams'] != null) {
+            final List streams = res.data['audioStreams'];
+            if (streams.isNotEmpty) {
+              // اختيار أعلى جودة صوت متاحة
+              streams.sort(
+                (a, b) => (b['bitrate'] as num? ?? 0).compareTo(
+                  a['bitrate'] as num? ?? 0,
+                ),
+              );
+              audioDownloadUrl = streams.first['url'] as String?;
+              if (audioDownloadUrl != null && audioDownloadUrl.isNotEmpty) {
+                break; // تم العثور على الرابط بنجاح!
+              }
+            }
+          }
+        } catch (_) {
+          continue; // تجربة السيرفر التالي في حالة تعثر أحدهم
         }
-      } catch (_) {
-        // في حالة عدم توفر السيرفر السريع ننتقل تلقائياً لـ youtube_explode
       }
 
-      // 2. إذا لم يتوفر الرابط السريع، نأخذ الرابط من youtube_explode مباشرة
-      if (downloadStreamUrl == null) {
-        statusText.value = 'Resolving audio stream...';
+      // في حالة تعذر الـ API الخارجي، نستخدم الـ Stream الداخلي للـ Client نفسه (وليس رابط الـ url)
+      if (audioDownloadUrl != null) {
+        statusText.value = 'Downloading audio at full speed...';
+
+        await _dio.download(
+          audioDownloadUrl,
+          tempFilePath,
+          onReceiveProgress: (received, total) {
+            if (total > 0) {
+              progressNotifier.value = (received / total).clamp(0.0, 1.0);
+              statusText.value =
+                  '${(progressNotifier.value * 100).toInt()}% downloaded';
+            } else {
+              final mb = (received / (1024 * 1024)).toStringAsFixed(1);
+              statusText.value = 'Downloaded $mb MB...';
+            }
+          },
+        );
+      } else {
+        // Fallback: تنزيل الـ Stream الداخلي للـ Client (يتجاوز 403 تماماً لأنه يستخدم نفس الـ Session)
+        statusText.value = 'Streaming audio track...';
         final manifest = await yt.videos.streamsClient.getManifest(videoId);
         final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
-        downloadStreamUrl = audioStreamInfo.url.toString();
-      }
 
-      statusText.value = 'Downloading audio...';
+        final tempFile = File(tempFilePath);
+        final fileStream = tempFile.openWrite();
+        final stream = yt.videos.streamsClient.get(audioStreamInfo);
 
-      // 3. التنزيل المباشر للبايتات عبر Dio مع إظهار النسبة الحقيقية
-      await _dio.download(
-        downloadStreamUrl,
-        tempFilePath,
-        options: Options(
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          },
-        ),
-        onReceiveProgress: (received, total) {
-          if (total > 0) {
-            progressNotifier.value = (received / total).clamp(0.0, 1.0);
+        final totalBytes = audioStreamInfo.size.totalBytes;
+        int downloadedBytes = 0;
+
+        await for (final chunk in stream) {
+          downloadedBytes += chunk.length;
+          fileStream.add(chunk);
+          if (totalBytes > 0) {
+            progressNotifier.value = (downloadedBytes / totalBytes).clamp(
+              0.0,
+              1.0,
+            );
             statusText.value =
                 '${(progressNotifier.value * 100).toInt()}% downloaded';
-          } else {
-            final mb = (received / (1024 * 1024)).toStringAsFixed(1);
-            statusText.value = 'Downloaded $mb MB...';
           }
-        },
-      );
+        }
+
+        await fileStream.flush();
+        await fileStream.close();
+      }
 
       statusText.value = 'Importing to your library...';
 
-      // 4. الحفظ في مكتبة الأغاني الدائمة
+      // الحفظ المباشر في مكتبة التطبيق
       await context.read<AudioLibraryCubit>().saveTrack(
-            sourcePath: tempFilePath,
-            title: trackTitle,
-          );
+        sourcePath: tempFilePath,
+        title: trackTitle,
+      );
 
       await context.read<AudioLibraryCubit>().loadTracks();
 
@@ -274,7 +311,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           context: context,
           builder: (ctx) => CupertinoAlertDialog(
             title: const Text('Download Notice'),
-            content: Text('Could not download audio: $e'),
+            content: Text('$e'),
             actions: [
               CupertinoDialogAction(
                 child: const Text('OK'),
@@ -338,16 +375,16 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   },
                   shouldOverrideUrlLoading:
                       (controller, navigationAction) async {
-                    final uri = navigationAction.request.url;
-                    if (uri == null) return NavigationActionPolicy.CANCEL;
+                        final uri = navigationAction.request.url;
+                        if (uri == null) return NavigationActionPolicy.CANCEL;
 
-                    final scheme = uri.scheme.toLowerCase();
-                    if (scheme != 'http' && scheme != 'https') {
-                      return NavigationActionPolicy.CANCEL;
-                    }
+                        final scheme = uri.scheme.toLowerCase();
+                        if (scheme != 'http' && scheme != 'https') {
+                          return NavigationActionPolicy.CANCEL;
+                        }
 
-                    return NavigationActionPolicy.ALLOW;
-                  },
+                        return NavigationActionPolicy.ALLOW;
+                      },
                 ),
               ),
             ),
@@ -384,8 +421,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ),
           CupertinoButton(
             padding: EdgeInsets.zero,
-            onPressed:
-                _canGoForward ? () => _webViewController?.goForward() : null,
+            onPressed: _canGoForward
+                ? () => _webViewController?.goForward()
+                : null,
             child: Icon(
               CupertinoIcons.forward,
               color: _canGoForward
@@ -412,10 +450,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   color: AppColors.textSecondary.withValues(alpha: 0.5),
                   fontSize: 13.sp,
                 ),
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13.sp,
-                ),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13.sp),
                 cursorColor: AppColors.lime,
                 padding: EdgeInsets.symmetric(horizontal: 10.w),
                 decoration: const BoxDecoration(color: Colors.transparent),
