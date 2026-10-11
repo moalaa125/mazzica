@@ -124,7 +124,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   // استخراج تيار الصوت وتنزيله وحفظه
-  Future<void> _downloadYouTubeAudio(String videoUrl) async {
+   Future<void> _downloadYouTubeAudio(String rawUrl) async {
     final progressNotifier = ValueNotifier<double>(0.0);
     final statusText = ValueNotifier<String>('Connecting to video...');
 
@@ -160,16 +160,40 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ),
     );
 
+    // إنشاء عميل نظيف خاص بهذه العملية في v3.1.0
+    final yt = YoutubeExplode();
+
     try {
-      statusText.value = 'Fetching audio stream...';
-      final video = await _yt.videos.get(videoUrl);
-      final manifest = await _yt.videos.streamsClient.getManifest(video.id);
+      // 1. في v3.1.0 يتم تحويل الرابط مباشرة إلى VideoId هكذا:
+      final videoId = VideoId(rawUrl);
 
-      // استخراج أفضل جودة صوت فقط
-      final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
+      statusText.value = 'Fetching track details...';
+      final video = await yt.videos.get(videoId).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw 'Connection timed out while fetching video details.',
+      );
 
-      final cleanTitle =
-          video.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+      statusText.value = 'Fetching audio streams...';
+      // جلب بيانات التيارات الصوتية في إصدار 3.x
+      final manifest = await yt.videos.streamsClient.getManifest(videoId).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw 'Connection timed out while extracting audio.',
+      );
+
+      // 2. اختيار تيار الصوت فقط بأعلى جودة
+      final audioStreams = manifest.audioOnly;
+      if (audioStreams.isEmpty) {
+        throw 'No standalone audio stream available for this video.';
+      }
+
+      final audioStreamInfo = audioStreams.withHighestBitrate();
+
+      statusText.value = 'Downloading audio stream...';
+
+      final cleanTitle = video.title
+          .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+          .trim();
+
       final tempDir = await getTemporaryDirectory();
       final tempFilePath = p.join(tempDir.path, '$cleanTitle.m4a');
       final tempFile = File(tempFilePath);
@@ -179,7 +203,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       }
 
       final output = tempFile.openWrite();
-      final stream = _yt.videos.streamsClient.get(audioStreamInfo);
+      final stream = yt.videos.streamsClient.get(audioStreamInfo);
 
       final totalBytes = audioStreamInfo.size.totalBytes;
       int downloadedBytes = 0;
@@ -187,17 +211,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
       await for (final data in stream) {
         downloadedBytes += data.length;
         output.add(data);
-        progressNotifier.value = downloadedBytes / totalBytes;
-        statusText.value =
-            '${(progressNotifier.value * 100).toInt()}% downloaded';
+        if (totalBytes > 0) {
+          progressNotifier.value = downloadedBytes / totalBytes;
+          statusText.value =
+              '${(progressNotifier.value * 100).toInt()}% downloaded';
+        }
       }
 
       await output.flush();
       await output.close();
 
-      if (mounted) Navigator.pop(context); // إغلاق الدايالوج
+      if (mounted) Navigator.pop(context); // إغلاق النافذة المنبثقة
 
-      // حفظ المقطع داخل التطبيق ومكتبة الموسيقى
+      // 3. الحفظ المباشر داخل مشغل وتطبيق Mazzica
       if (mounted) {
         await context.read<AudioLibraryCubit>().saveTrack(
               sourcePath: tempFilePath,
@@ -208,7 +234,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           SnackBar(
             backgroundColor: AppColors.surface,
             content: Text(
-              'Saved "${video.title}" to My Audios!',
+              'Successfully saved: "${video.title}"',
               style: const TextStyle(color: AppColors.lime),
             ),
           ),
@@ -216,14 +242,16 @@ class _ExploreScreenState extends State<ExploreScreen> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context); // إغلاق النافذة في حالة الخطأ
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.coral,
-            content: Text('Download error: $e'),
+            content: Text('Download failed: $e'),
           ),
         );
       }
+    } finally {
+      yt.close(); // إغلاق العميل بأمان لتجنب تسريب الاتصال
     }
   }
 
