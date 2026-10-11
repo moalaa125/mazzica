@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -29,6 +31,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   final String _initialUrl = 'https://m.youtube.com';
 
   late final InAppWebViewSettings _settings;
+  final Dio _dio = Dio();
 
   @override
   void initState() {
@@ -42,7 +45,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
       useHybridComposition: true,
       transparentBackground: true,
       supportZoom: true,
-      // منع الخروج لتطبيق يوتيوب الخارجي عبر محاكاة متصفح Safari للجوال
       applicationNameForUserAgent:
           "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
     );
@@ -85,7 +87,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  // عند الضغط على زر التنزيل في الشريط العلوي
   Future<void> _handleDownloadCurrentPage() async {
     final currentUrl = (await _webViewController?.getUrl())?.toString();
 
@@ -98,7 +99,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
       return;
     }
 
-    // التحقق من أن الرابط هو فيديو يوتيوب أو شورتس
     final isYouTubeVideo = currentUrl.contains('watch?v=') ||
         currentUrl.contains('youtu.be/') ||
         currentUrl.contains('/shorts/');
@@ -118,14 +118,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
       return;
     }
 
-    // بدء تنزيل الصوت
-    _downloadYouTubeAudio(currentUrl);
+    _downloadAudio(currentUrl);
   }
 
-  // تنزيل تيار الصوت وحفظه في التطبيق
-  Future<void> _downloadYouTubeAudio(String rawUrl) async {
+  // التنزيل السريع المباشر وتفادي قيود يوتيوب
+  Future<void> _downloadAudio(String rawUrl) async {
     final progressNotifier = ValueNotifier<double>(0.0);
-    final statusText = ValueNotifier<String>('Connecting to video...');
+    final statusText = ValueNotifier<String>('Getting track details...');
 
     showDialog(
       context: context,
@@ -164,85 +163,97 @@ class _ExploreScreenState extends State<ExploreScreen> {
     try {
       final videoId = VideoId(rawUrl);
 
-      statusText.value = 'Fetching track details...';
+      // جلب عنوان الفيديو بسرعة
       final video = await yt.videos.get(videoId).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw 'Connection timed out while fetching video details.',
+        const Duration(seconds: 10),
+        onTimeout: () => throw 'Could not connect to YouTube.',
       );
 
-      statusText.value = 'Extracting audio streams...';
-      final manifest = await yt.videos.streamsClient.getManifest(videoId).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw 'Connection timed out while extracting audio.',
-      );
-
-      final audioStreams = manifest.audioOnly;
-      if (audioStreams.isEmpty) {
-        throw 'No standalone audio stream available for this video.';
-      }
-
-      // اختيار تيار الصوت الأعلى جودة
-      final audioStreamInfo = audioStreams.withHighestBitrate();
-
-      statusText.value = 'Downloading audio stream...';
-
-      // 🔥 استخدام اسم ملف مؤقت إنجليزي آمن للقرص لتفادي مشاكل الحروف العربية وعلامات التنصيص
-      final tempDir = await getTemporaryDirectory();
-      final safeFileName = 'yt_${DateTime.now().microsecondsSinceEpoch}.m4a';
-      final tempFilePath = p.join(tempDir.path, safeFileName);
-      final tempFile = File(tempFilePath);
-
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
-
-      // فتح دفق الملف والتنزيل عبر streamsClient الموثوق
-      final fileStream = tempFile.openWrite();
-      final audioStream = yt.videos.streamsClient.get(audioStreamInfo);
-
-      final totalBytes = audioStreamInfo.size.totalBytes;
-      int downloadedBytes = 0;
-
-      await for (final chunk in audioStream) {
-        downloadedBytes += chunk.length;
-        fileStream.add(chunk);
-
-        if (totalBytes > 0) {
-          progressNotifier.value = downloadedBytes / totalBytes;
-          statusText.value =
-              '${(progressNotifier.value * 100).toInt()}% downloaded';
-        } else {
-          final mb = (downloadedBytes / (1024 * 1024)).toStringAsFixed(1);
-          statusText.value = 'Downloaded $mb MB...';
-        }
-      }
-
-      await fileStream.flush();
-      await fileStream.close();
-
-      statusText.value = 'Saving to library...';
-
-      // الحفظ المباشر داخل مكتبة التطبيق (بالعنوان الأصلي للفيديو)
       final trackTitle =
-          video.title.trim().isEmpty ? 'YouTube Track' : video.title.trim();
+          video.title.trim().isEmpty ? 'YouTube Audio' : video.title.trim();
 
+      statusText.value = 'Connecting to high-speed stream...';
+
+      final tempDir = await getTemporaryDirectory();
+      final tempFilePath =
+          p.join(tempDir.path, 'audio_${DateTime.now().microsecondsSinceEpoch}.m4a');
+
+      String? downloadStreamUrl;
+
+      // 1. محاولة جلب رابط تنزيل سريع ومفتوح لا يخضع لقيود سرعة يوتيوب
+      try {
+        final apiResponse = await _dio.post(
+          'https://api.cobalt.tools/api/json',
+          options: Options(
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+          ),
+          data: jsonEncode({
+            'url': 'https://www.youtube.com/watch?v=${videoId.value}',
+            'isAudioOnly': true,
+            'aFormat': 'mp3',
+          }),
+        ).timeout(const Duration(seconds: 8));
+
+        if (apiResponse.statusCode == 200 && apiResponse.data['url'] != null) {
+          downloadStreamUrl = apiResponse.data['url'];
+        }
+      } catch (_) {
+        // في حالة عدم توفر السيرفر السريع ننتقل تلقائياً لـ youtube_explode
+      }
+
+      // 2. إذا لم يتوفر الرابط السريع، نأخذ الرابط من youtube_explode مباشرة
+      if (downloadStreamUrl == null) {
+        statusText.value = 'Resolving audio stream...';
+        final manifest = await yt.videos.streamsClient.getManifest(videoId);
+        final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
+        downloadStreamUrl = audioStreamInfo.url.toString();
+      }
+
+      statusText.value = 'Downloading audio...';
+
+      // 3. التنزيل المباشر للبايتات عبر Dio مع إظهار النسبة الحقيقية
+      await _dio.download(
+        downloadStreamUrl,
+        tempFilePath,
+        options: Options(
+          headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        ),
+        onReceiveProgress: (received, total) {
+          if (total > 0) {
+            progressNotifier.value = (received / total).clamp(0.0, 1.0);
+            statusText.value =
+                '${(progressNotifier.value * 100).toInt()}% downloaded';
+          } else {
+            final mb = (received / (1024 * 1024)).toStringAsFixed(1);
+            statusText.value = 'Downloaded $mb MB...';
+          }
+        },
+      );
+
+      statusText.value = 'Importing to your library...';
+
+      // 4. الحفظ في مكتبة الأغاني الدائمة
       await context.read<AudioLibraryCubit>().saveTrack(
             sourcePath: tempFilePath,
             title: trackTitle,
           );
 
-      // 🔥 إعادة تحميل القائمة للتأكد من ظهورها في تبويب Music فوراً
       await context.read<AudioLibraryCubit>().loadTracks();
 
-      // حذف الملف المؤقت بعد نسخه بأمان داخل مجلد التطبيق الدائم
-      try {
-        if (await tempFile.exists()) {
-          await tempFile.delete();
-        }
-      } catch (_) {}
+      // تنظيف الملف المؤقت
+      final tempFile = File(tempFilePath);
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
 
       if (mounted) {
-        Navigator.pop(context); // إغلاق الدايالوج بنجاح
+        Navigator.pop(context); // إغلاق الدايالوج
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -257,14 +268,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // إغلاق الدايالوج في حالة الخطأ
+        Navigator.pop(context);
 
-        // إظهار نافذة خطأ واضحة في حالة حدوث أي استثناء
         showCupertinoDialog(
           context: context,
           builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('Download Failed'),
-            content: Text('$e'),
+            title: const Text('Download Notice'),
+            content: Text('Could not download audio: $e'),
             actions: [
               CupertinoDialogAction(
                 child: const Text('OK'),
@@ -282,6 +292,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   @override
   void dispose() {
     _urlController.dispose();
+    _dio.close();
     super.dispose();
   }
 
@@ -296,10 +307,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         bottom: false,
         child: Column(
           children: [
-            // الشريط العلوي مع زر التحميل
             _buildTopBar(),
-
-            // مؤشر تحميل الصفحة
             if (_pageProgress < 1.0)
               LinearProgressIndicator(
                 value: _pageProgress,
@@ -307,8 +315,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
                 minHeight: 2.h,
               ),
-
-            // المتصفح
             Expanded(
               child: Padding(
                 padding: EdgeInsets.only(bottom: bottomInset),
@@ -330,7 +336,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       _pageProgress = progress / 100;
                     });
                   },
-                  // منع الخروج من التطبيق لأي رابط خارجي
                   shouldOverrideUrlLoading:
                       (controller, navigationAction) async {
                     final uri = navigationAction.request.url;
@@ -366,7 +371,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ),
       child: Row(
         children: [
-          // زر الرجوع
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: _canGoBack ? () => _webViewController?.goBack() : null,
@@ -378,8 +382,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
               size: 22.sp,
             ),
           ),
-
-          // زر التقدم
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed:
@@ -392,10 +394,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               size: 22.sp,
             ),
           ),
-
           SizedBox(width: 4.w),
-
-          // شريط العنوان والبحث
           Expanded(
             child: Container(
               height: 36.h,
@@ -433,10 +432,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
             ),
           ),
-
           SizedBox(width: 4.w),
-
-          // 🔥 زر التنزيل الدائم في الشريط العلوي
           CupertinoButton(
             padding: EdgeInsets.symmetric(horizontal: 6.w),
             onPressed: _handleDownloadCurrentPage,
@@ -453,8 +449,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
             ),
           ),
-
-          // زر التحديث
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: () => _webViewController?.reload(),
