@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -123,7 +122,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _downloadYouTubeAudio(currentUrl);
   }
 
-  // تنزيل تيار الصوت وحفظه
+  // تنزيل تيار الصوت وحفظه في التطبيق
   Future<void> _downloadYouTubeAudio(String rawUrl) async {
     final progressNotifier = ValueNotifier<double>(0.0);
     final statusText = ValueNotifier<String>('Connecting to video...');
@@ -171,7 +170,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         onTimeout: () => throw 'Connection timed out while fetching video details.',
       );
 
-      statusText.value = 'Fetching audio streams...';
+      statusText.value = 'Extracting audio streams...';
       final manifest = await yt.videos.streamsClient.getManifest(videoId).timeout(
         const Duration(seconds: 15),
         onTimeout: () => throw 'Connection timed out while extracting audio.',
@@ -185,54 +184,72 @@ class _ExploreScreenState extends State<ExploreScreen> {
       // اختيار تيار الصوت الأعلى جودة
       final audioStreamInfo = audioStreams.withHighestBitrate();
 
-      statusText.value = 'Starting fast download...';
+      statusText.value = 'Downloading audio stream...';
 
-      final cleanTitle = video.title
-          .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
-          .trim();
-
+      // 🔥 استخدام اسم ملف مؤقت إنجليزي آمن للقرص لتفادي مشاكل الحروف العربية وعلامات التنصيص
       final tempDir = await getTemporaryDirectory();
-      final tempFilePath = p.join(tempDir.path, '$cleanTitle.m4a');
+      final safeFileName = 'yt_${DateTime.now().microsecondsSinceEpoch}.m4a';
+      final tempFilePath = p.join(tempDir.path, safeFileName);
+      final tempFile = File(tempFilePath);
 
-      // 🔥 إعداد كائن Dio بشكل متوافق ومضمون دون أخطاء في الـ BaseOptions
-      final dio = Dio();
-      dio.options.connectTimeout = const Duration(seconds: 20);
-      dio.options.receiveTimeout = const Duration(seconds: 60);
-      dio.options.headers = {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://www.youtube.com/',
-      };
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
 
-      await dio.download(
-        audioStreamInfo.url.toString(),
-        tempFilePath,
-        onReceiveProgress: (received, total) {
-          if (total > 0) {
-            progressNotifier.value = received / total;
-            statusText.value =
-                '${(progressNotifier.value * 100).toInt()}% downloaded';
-          } else {
-            final mb = (received / (1024 * 1024)).toStringAsFixed(1);
-            statusText.value = 'Downloaded $mb MB...';
-          }
-        },
-      );
+      // فتح دفق الملف والتنزيل عبر streamsClient الموثوق
+      final fileStream = tempFile.openWrite();
+      final audioStream = yt.videos.streamsClient.get(audioStreamInfo);
 
-      if (mounted) Navigator.pop(context); // إغلاق الدايالوج
+      final totalBytes = audioStreamInfo.size.totalBytes;
+      int downloadedBytes = 0;
 
-      // الحفظ المباشر في مكتبة التطبيق
+      await for (final chunk in audioStream) {
+        downloadedBytes += chunk.length;
+        fileStream.add(chunk);
+
+        if (totalBytes > 0) {
+          progressNotifier.value = downloadedBytes / totalBytes;
+          statusText.value =
+              '${(progressNotifier.value * 100).toInt()}% downloaded';
+        } else {
+          final mb = (downloadedBytes / (1024 * 1024)).toStringAsFixed(1);
+          statusText.value = 'Downloaded $mb MB...';
+        }
+      }
+
+      await fileStream.flush();
+      await fileStream.close();
+
+      statusText.value = 'Saving to library...';
+
+      // الحفظ المباشر داخل مكتبة التطبيق (بالعنوان الأصلي للفيديو)
+      final trackTitle =
+          video.title.trim().isEmpty ? 'YouTube Track' : video.title.trim();
+
+      await context.read<AudioLibraryCubit>().saveTrack(
+            sourcePath: tempFilePath,
+            title: trackTitle,
+          );
+
+      // 🔥 إعادة تحميل القائمة للتأكد من ظهورها في تبويب Music فوراً
+      await context.read<AudioLibraryCubit>().loadTracks();
+
+      // حذف الملف المؤقت بعد نسخه بأمان داخل مجلد التطبيق الدائم
+      try {
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+      } catch (_) {}
+
       if (mounted) {
-        await context.read<AudioLibraryCubit>().saveTrack(
-              sourcePath: tempFilePath,
-              title: video.title,
-            );
+        Navigator.pop(context); // إغلاق الدايالوج بنجاح
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.surface,
+            duration: const Duration(seconds: 4),
             content: Text(
-              'Successfully saved: "${video.title}"',
+              'Saved "$trackTitle" to My Audios! 🎉',
               style: const TextStyle(color: AppColors.lime),
             ),
           ),
@@ -241,10 +258,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // إغلاق الدايالوج في حالة الخطأ
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.coral,
-            content: Text('Download failed: $e'),
+
+        // إظهار نافذة خطأ واضحة في حالة حدوث أي استثناء
+        showCupertinoDialog(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: const Text('Download Failed'),
+            content: Text('$e'),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('OK'),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
           ),
         );
       }
