@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +30,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   final String _initialUrl = 'https://m.youtube.com';
 
   late final InAppWebViewSettings _settings;
-  final YoutubeExplode _yt = YoutubeExplode();
 
   @override
   void initState() {
@@ -123,8 +123,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _downloadYouTubeAudio(currentUrl);
   }
 
-  // استخراج تيار الصوت وتنزيله وحفظه
-   Future<void> _downloadYouTubeAudio(String rawUrl) async {
+  // تنزيل تيار الصوت وحفظه
+  Future<void> _downloadYouTubeAudio(String rawUrl) async {
     final progressNotifier = ValueNotifier<double>(0.0);
     final statusText = ValueNotifier<String>('Connecting to video...');
 
@@ -160,11 +160,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ),
     );
 
-    // إنشاء عميل نظيف خاص بهذه العملية في v3.1.0
     final yt = YoutubeExplode();
 
     try {
-      // 1. في v3.1.0 يتم تحويل الرابط مباشرة إلى VideoId هكذا:
       final videoId = VideoId(rawUrl);
 
       statusText.value = 'Fetching track details...';
@@ -174,21 +172,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
       );
 
       statusText.value = 'Fetching audio streams...';
-      // جلب بيانات التيارات الصوتية في إصدار 3.x
       final manifest = await yt.videos.streamsClient.getManifest(videoId).timeout(
         const Duration(seconds: 15),
         onTimeout: () => throw 'Connection timed out while extracting audio.',
       );
 
-      // 2. اختيار تيار الصوت فقط بأعلى جودة
       final audioStreams = manifest.audioOnly;
       if (audioStreams.isEmpty) {
         throw 'No standalone audio stream available for this video.';
       }
 
+      // اختيار تيار الصوت الأعلى جودة
       final audioStreamInfo = audioStreams.withHighestBitrate();
 
-      statusText.value = 'Downloading audio stream...';
+      statusText.value = 'Starting fast download...';
 
       final cleanTitle = video.title
           .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
@@ -196,34 +193,35 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
       final tempDir = await getTemporaryDirectory();
       final tempFilePath = p.join(tempDir.path, '$cleanTitle.m4a');
-      final tempFile = File(tempFilePath);
 
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
+      // 🔥 إعداد كائن Dio بشكل متوافق ومضمون دون أخطاء في الـ BaseOptions
+      final dio = Dio();
+      dio.options.connectTimeout = const Duration(seconds: 20);
+      dio.options.receiveTimeout = const Duration(seconds: 60);
+      dio.options.headers = {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.youtube.com/',
+      };
 
-      final output = tempFile.openWrite();
-      final stream = yt.videos.streamsClient.get(audioStreamInfo);
+      await dio.download(
+        audioStreamInfo.url.toString(),
+        tempFilePath,
+        onReceiveProgress: (received, total) {
+          if (total > 0) {
+            progressNotifier.value = received / total;
+            statusText.value =
+                '${(progressNotifier.value * 100).toInt()}% downloaded';
+          } else {
+            final mb = (received / (1024 * 1024)).toStringAsFixed(1);
+            statusText.value = 'Downloaded $mb MB...';
+          }
+        },
+      );
 
-      final totalBytes = audioStreamInfo.size.totalBytes;
-      int downloadedBytes = 0;
+      if (mounted) Navigator.pop(context); // إغلاق الدايالوج
 
-      await for (final data in stream) {
-        downloadedBytes += data.length;
-        output.add(data);
-        if (totalBytes > 0) {
-          progressNotifier.value = downloadedBytes / totalBytes;
-          statusText.value =
-              '${(progressNotifier.value * 100).toInt()}% downloaded';
-        }
-      }
-
-      await output.flush();
-      await output.close();
-
-      if (mounted) Navigator.pop(context); // إغلاق النافذة المنبثقة
-
-      // 3. الحفظ المباشر داخل مشغل وتطبيق Mazzica
+      // الحفظ المباشر في مكتبة التطبيق
       if (mounted) {
         await context.read<AudioLibraryCubit>().saveTrack(
               sourcePath: tempFilePath,
@@ -242,7 +240,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // إغلاق النافذة في حالة الخطأ
+        Navigator.pop(context); // إغلاق الدايالوج في حالة الخطأ
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.coral,
@@ -251,14 +249,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
         );
       }
     } finally {
-      yt.close(); // إغلاق العميل بأمان لتجنب تسريب الاتصال
+      yt.close();
     }
   }
 
   @override
   void dispose() {
     _urlController.dispose();
-    _yt.close();
     super.dispose();
   }
 
