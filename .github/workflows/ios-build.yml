@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java (for Flutter toolchain)
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -28,11 +28,17 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS IPA (Unsigned)
-        run: flutter build ipa --no-codesign
+      - name: Build iOS Unsigned App
+        run: flutter build ios --release --no-codesign
+
+      - name: Create Payload Directory and IPA
+        run: |
+          mkdir -p Payload
+          mv build/ios/iphoneos/Runner.app Payload/
+          zip -r Mazzica.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-ipa
-          path: build/ios/ipa/*.ipa
+          name: Mazzica-iOS-Unsigned
+          path: Mazzica.ipa
