@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +9,7 @@ import 'package:mazzica/constants/app_color.dart';
 import 'package:mazzica/cubits/audio_library_cubit.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -24,12 +25,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
   double _pageProgress = 0.0;
   bool _canGoBack = false;
   bool _canGoForward = false;
+  String? _currentVideoUrl;
 
-  // صفحة البداية الافتراضية (محرك بحث عام محايد تماماً ومقبول في المتاجر)
-  final String _initialUrl = 'https://www.google.com';
+  final String _initialUrl = 'https://m.youtube.com';
 
   late final InAppWebViewSettings _settings;
-  final Dio _dio = Dio();
+  final YoutubeExplode _yt = YoutubeExplode();
 
   @override
   void initState() {
@@ -43,7 +44,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
       useHybridComposition: true,
       transparentBackground: true,
       supportZoom: true,
-      useOnDownloadStart: true,
+      // 🔥 منع نظام iOS وأندرويد من تحويل الروابط للتطبيقات الخارجية
+      applicationNameForUserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
     );
   }
 
@@ -66,114 +68,110 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  Future<void> _updateNavState() async {
+  Future<void> _updateNavState(WebUri? url) async {
     if (_webViewController != null) {
       final canGoBack = await _webViewController!.canGoBack();
       final canGoForward = await _webViewController!.canGoForward();
+
+      final urlString = url?.toString() ?? '';
+      _urlController.text = urlString;
+
+      // فحص ما إذا كانت الصفحة الحالية فيديو يوتيوب
+      final isYouTubeVideo = urlString.contains('watch?v=') || urlString.contains('youtu.be/');
+
       if (mounted) {
         setState(() {
           _canGoBack = canGoBack;
           _canGoForward = canGoForward;
+          _currentVideoUrl = isYouTubeVideo ? urlString : null;
         });
       }
     }
   }
 
-  // معالجة تنزيل الملف وحفظه داخل التطبيق
-  Future<void> _downloadAndSaveFile(String fileUrl, {String? customName}) async {
-    String suggestedName = customName ?? p.basename(Uri.parse(fileUrl).path);
-    if (suggestedName.isEmpty || !suggestedName.contains('.')) {
-      suggestedName = 'audio_${DateTime.now().millisecondsSinceEpoch}.mp3';
-    }
-
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Download Media'),
-        content: Text(
-          'Do you want to download and import:\n"$suggestedName" to your library?',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Download'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    // إظهار مؤشر تقدم التنزيل
+  // تنزيل تيار الصوت من يوتيوب وحفظه في التطبيق
+  Future<void> _downloadYouTubeAudio(String videoUrl) async {
     final progressNotifier = ValueNotifier<double>(0.0);
+    final statusText = ValueNotifier<String>('Fetching audio stream...');
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => ValueListenableBuilder<double>(
-        valueListenable: progressNotifier,
-        builder: (_, progress, __) => CupertinoAlertDialog(
-          title: const Text('Downloading...'),
-          content: Column(
-            children: [
-              SizedBox(height: 14.h),
-              LinearProgressIndicator(
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Downloading Track'),
+        content: Column(
+          children: [
+            SizedBox(height: 14.h),
+            ValueListenableBuilder<double>(
+              valueListenable: progressNotifier,
+              builder: (_, progress, __) => LinearProgressIndicator(
                 value: progress > 0 ? progress : null,
                 valueColor: const AlwaysStoppedAnimation(AppColors.lime),
                 backgroundColor: AppColors.surface,
               ),
-              SizedBox(height: 8.h),
-              Text(
-                progress > 0
-                    ? '${(progress * 100).toInt()}%'
-                    : 'Connecting...',
+            ),
+            SizedBox(height: 8.h),
+            ValueListenableBuilder<String>(
+              valueListenable: statusText,
+              builder: (_, text, __) => Text(
+                text,
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 12.sp,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
 
     try {
+      final video = await _yt.videos.get(videoUrl);
+      final manifest = await _yt.videos.streamsClient.getManifest(video.id);
+
+      // اختيار تيار الصوت فقط بأعلى جودة
+      final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
+
+      final cleanTitle = video.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
       final tempDir = await getTemporaryDirectory();
-      final tempPath = p.join(tempDir.path, suggestedName);
+      final tempFilePath = p.join(tempDir.path, '$cleanTitle.m4a');
+      final tempFile = File(tempFilePath);
 
-      await _dio.download(
-        fileUrl,
-        tempPath,
-        onReceiveProgress: (received, total) {
-          if (total > 0) {
-            progressNotifier.value = received / total;
-          }
-        },
-      );
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
 
-      // إغلاق نافذة التنزيل
-      if (mounted) Navigator.pop(context);
+      final output = tempFile.openWrite();
+      final stream = _yt.videos.streamsClient.get(audioStreamInfo);
 
-      final title = p.basenameWithoutExtension(suggestedName);
+      final totalBytes = audioStreamInfo.size.totalBytes;
+      int downloadedBytes = 0;
 
-      // حفظ الملف داخل مسار التطبيق ومكتبة الصوتيات
+      await for (final data in stream) {
+        downloadedBytes += data.length;
+        output.add(data);
+        progressNotifier.value = downloadedBytes / totalBytes;
+        statusText.value = '${(progressNotifier.value * 100).toInt()}% downloaded';
+      }
+
+      await output.flush();
+      await output.close();
+
+      if (mounted) Navigator.pop(context); // إغلاق الدايالوج
+
+      // حفظ المقطع فوراً في مكتبة الموسيقى داخل التطبيق
       if (mounted) {
         await context.read<AudioLibraryCubit>().saveTrack(
-              sourcePath: tempPath,
-              title: title,
+              sourcePath: tempFilePath,
+              title: video.title,
             );
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.surface,
             content: Text(
-              'Imported "$title" to your music library!',
+              'Saved "${video.title}" to My Audios!',
               style: const TextStyle(color: AppColors.lime),
             ),
           ),
@@ -185,58 +183,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.coral,
-            content: Text('Download failed: $e'),
+            content: Text('Download error: $e'),
           ),
         );
       }
     }
   }
 
-  // نافذة لإدخال رابط تنزيل مباشر يدوياً
-  void _showDirectDownloadDialog() {
-    final textController = TextEditingController();
-    showCupertinoDialog(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Download from URL'),
-        content: Padding(
-          padding: EdgeInsets.only(top: 10.h),
-          child: CupertinoTextField(
-            controller: textController,
-            placeholder: 'Paste direct audio link (e.g. .mp3)...',
-            placeholderStyle: TextStyle(
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
-              fontSize: 12.sp,
-            ),
-            style: const TextStyle(color: AppColors.textPrimary),
-            cursorColor: AppColors.lime,
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () {
-              final url = textController.text.trim();
-              Navigator.pop(ctx);
-              if (url.isNotEmpty) {
-                _downloadAndSaveFile(url);
-              }
-            },
-            child: const Text('Start'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _urlController.dispose();
-    _dio.close();
+    _yt.close();
     super.dispose();
   }
 
@@ -249,60 +206,95 @@ class _ExploreScreenState extends State<ExploreScreen> {
       backgroundColor: AppColors.bg,
       child: SafeArea(
         bottom: false,
-        child: Column(
+        child: Stack(
           children: [
-            // شريط التنقل والبحث العلوي
-            _buildTopBar(),
+            Column(
+              children: [
+                _buildTopBar(),
+                if (_pageProgress < 1.0)
+                  LinearProgressIndicator(
+                    value: _pageProgress,
+                    backgroundColor: AppColors.surface,
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
+                    minHeight: 2.h,
+                  ),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: bottomInset),
+                    child: InAppWebView(
+                      initialUrlRequest: URLRequest(url: WebUri(_initialUrl)),
+                      initialSettings: _settings,
+                      onWebViewCreated: (controller) {
+                        _webViewController = controller;
+                      },
+                      onLoadStart: (controller, url) => _updateNavState(url),
+                      onLoadStop: (controller, url) => _updateNavState(url),
+                      onProgressChanged: (controller, progress) {
+                        setState(() {
+                          _pageProgress = progress / 100;
+                        });
+                      },
+                      // 🔥 السطر السحري: منع فتح تطبيق يوتيوب الخارجي وإبقائه داخل التطبيق دائماً
+                      shouldOverrideUrlLoading: (controller, navigationAction) async {
+                        final uri = navigationAction.request.url;
+                        if (uri == null) return NavigationActionPolicy.CANCEL;
 
-            // مؤشر تقدم تحميل صفحة الويب
-            if (_pageProgress < 1.0)
-              LinearProgressIndicator(
-                value: _pageProgress,
-                backgroundColor: AppColors.surface,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
-                minHeight: 2.h,
-              ),
+                        final scheme = uri.scheme.toLowerCase();
+                        if (scheme != 'http' && scheme != 'https') {
+                          // منع intent:// أو vnd.youtube://
+                          return NavigationActionPolicy.CANCEL;
+                        }
 
-            // متصفح الويب
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: bottomInset),
-                child: InAppWebView(
-                  initialUrlRequest: URLRequest(url: WebUri(_initialUrl)),
-                  initialSettings: _settings,
-                  onWebViewCreated: (controller) {
-                    _webViewController = controller;
-                  },
-                  onLoadStart: (controller, url) {
-                    if (url != null) {
-                      _urlController.text = url.toString();
-                    }
-                    _updateNavState();
-                  },
-                  onLoadStop: (controller, url) {
-                    if (url != null) {
-                      _urlController.text = url.toString();
-                    }
-                    _updateNavState();
-                  },
-                  onProgressChanged: (controller, progress) {
-                    setState(() {
-                      _pageProgress = progress / 100;
-                    });
-                  },
-                  onReceivedError: (controller, request, error) {
-                    _updateNavState();
-                  },
-                  // 🔥 التقاط أي رابط تنزيل وسائط يتم الضغط عليه في الصفحة
-                  onDownloadStartRequest: (controller, downloadRequest) {
-                    _downloadAndSaveFile(
-                      downloadRequest.url.toString(),
-                      customName: downloadRequest.suggestedFilename,
-                    );
-                  },
+                        return NavigationActionPolicy.ALLOW;
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // 🔥 زر التنزيل العائم: يظهر فقط عند فتح أي فيديو على يوتيوب
+            if (_currentVideoUrl != null)
+              Positioned(
+                bottom: bottomInset + 16.h,
+                right: 16.w,
+                child: GestureDetector(
+                  onTap: () => _downloadYouTubeAudio(_currentVideoUrl!),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                    decoration: BoxDecoration(
+                      color: AppColors.lime,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.lime.withValues(alpha: 0.4),
+                          blurRadius: 16,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          CupertinoIcons.arrow_down_to_line_alt,
+                          color: AppColors.bg,
+                          size: 20,
+                        ),
+                        SizedBox(width: 8.w),
+                        Text(
+                          'Save Audio',
+                          style: TextStyle(
+                            color: AppColors.bg,
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -323,36 +315,25 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ),
       child: Row(
         children: [
-          // زر الرجوع
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: _canGoBack ? () => _webViewController?.goBack() : null,
             child: Icon(
               CupertinoIcons.back,
-              color: _canGoBack
-                  ? AppColors.lime
-                  : AppColors.textSecondary.withValues(alpha: 0.3),
+              color: _canGoBack ? AppColors.lime : AppColors.textSecondary.withValues(alpha: 0.3),
               size: 22.sp,
             ),
           ),
-
-          // زر التقدم
           CupertinoButton(
             padding: EdgeInsets.zero,
-            onPressed:
-                _canGoForward ? () => _webViewController?.goForward() : null,
+            onPressed: _canGoForward ? () => _webViewController?.goForward() : null,
             child: Icon(
               CupertinoIcons.forward,
-              color: _canGoForward
-                  ? AppColors.lime
-                  : AppColors.textSecondary.withValues(alpha: 0.3),
+              color: _canGoForward ? AppColors.lime : AppColors.textSecondary.withValues(alpha: 0.3),
               size: 22.sp,
             ),
           ),
-
           SizedBox(width: 4.w),
-
-          // شريط البحث والعناوين
           Expanded(
             child: Container(
               height: 36.h,
@@ -370,10 +351,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   color: AppColors.textSecondary.withValues(alpha: 0.5),
                   fontSize: 13.sp,
                 ),
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13.sp,
-                ),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13.sp),
                 cursorColor: AppColors.lime,
                 padding: EdgeInsets.symmetric(horizontal: 10.w),
                 decoration: const BoxDecoration(color: Colors.transparent),
@@ -387,33 +365,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     size: 16.sp,
                   ),
                 ),
-                suffix: CupertinoButton(
-                  padding: EdgeInsets.symmetric(horizontal: 6.w),
-                  onPressed: () => _urlController.clear(),
-                  child: Icon(
-                    CupertinoIcons.clear_circled_solid,
-                    color: AppColors.textSecondary.withValues(alpha: 0.5),
-                    size: 16.sp,
-                  ),
-                ),
               ),
             ),
           ),
-
           SizedBox(width: 4.w),
-
-          // زر لصق وتنزيل رابط مباشر
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: _showDirectDownloadDialog,
-            child: Icon(
-              CupertinoIcons.arrow_down_circle,
-              color: AppColors.lime,
-              size: 22.sp,
-            ),
-          ),
-
-          // زر التحديث
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: () => _webViewController?.reload(),
