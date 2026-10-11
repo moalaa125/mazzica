@@ -175,14 +175,27 @@ class _ExploreScreenState extends State<ExploreScreen> {
       statusText.value = 'Extracting audio streams...';
 
       final manifest = await yt.videos.streamsClient.getManifest(videoId);
-      final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
+
+      // ✅ خذ AAC/MP4 فقط — المتوافق مع iOS و Android
+      // (webm/opus لا يعمل على iOS أبداً حتى لو غيّرنا الامتداد)
+      final audioStreamInfo = manifest.audioOnly
+          .where((s) => s.container == StreamContainer.mp4)
+          .sortByBitrate()
+          .firstOrNull;
+
+      if (audioStreamInfo == null) {
+        throw 'No compatible audio stream (AAC) found for this video.';
+      }
 
       statusText.value = 'Downloading audio file...';
 
       final tempDir = await getTemporaryDirectory();
+
+      // ✅ استخدم الامتداد الحقيقي للحاوية بدل hardcode لـ m4a
+      final extension = audioStreamInfo.container.name; // 'mp4'
       final tempFilePath = p.join(
         tempDir.path,
-        'audio_${DateTime.now().microsecondsSinceEpoch}.m4a',
+        'audio_${DateTime.now().microsecondsSinceEpoch}.$extension',
       );
 
       final file = File(tempFilePath);
@@ -206,6 +219,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
       await sink.flush();
       await sink.close();
 
+      // ✅ رفض الملفات الناقصة حتى لا تُحفظ في المكتبة ملفات تالفة
+      if (receivedBytes < totalBytes) {
+        if (await file.exists()) {
+          await file.delete();
+        }
+        throw 'Download incomplete. Please try again.';
+      }
+
       statusText.value = 'Saving to your music library...';
 
       await context.read<AudioLibraryCubit>().saveTrack(
@@ -221,7 +242,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       }
 
       if (mounted) {
-        Navigator.pop(context); 
+        Navigator.pop(context);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
