@@ -1,19 +1,17 @@
-
 import 'dart:async';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:path/path.dart' as p;
+
 import 'package:mazzica/constants/app_color.dart';
 import 'package:mazzica/cubits/audio_library_cubit.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import 'package:mazzica/services/direct_media_download_service.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -25,6 +23,9 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen> {
   InAppWebViewController? _webViewController;
   final TextEditingController _urlController = TextEditingController();
+
+  final DirectMediaDownloadService _downloadService =
+      DirectMediaDownloadService();
 
   double _pageProgress = 0.0;
   bool _canGoBack = false;
@@ -116,54 +117,29 @@ class _ExploreScreenState extends State<ExploreScreen> {
   Future<void> _handleDownloadCurrentPage() async {
     if (_isDownloading) return;
 
-    final currentUrl =
-        (await _webViewController?.getUrl())?.toString();
+    final currentUrl = (await _webViewController?.getUrl())?.toString();
+
+    if (!mounted) return;
 
     if (currentUrl == null || currentUrl.isEmpty) {
-      _showMessage('No webpage loaded.');
+      _showMessage('No URL available.');
       return;
     }
 
-    final uri = Uri.tryParse(currentUrl);
-
-    if (uri == null) {
-      _showMessage('Invalid webpage URL.');
-      return;
-    }
-
-    final host = uri.host.toLowerCase();
-    final isYouTubeHost =
-        host == 'youtube.com' ||
-        host.endsWith('.youtube.com') ||
-        host == 'youtu.be';
-
-    final isYouTubeVideo = isYouTubeHost &&
-        (uri.path == '/watch' && uri.queryParameters.containsKey('v') ||
-            uri.path.startsWith('/shorts/') ||
-            host == 'youtu.be' && uri.pathSegments.isNotEmpty);
-
-    if (!isYouTubeVideo) {
-      _showMessage('Please open a YouTube video first.');
-      return;
-    }
-
-    await _downloadAudio(currentUrl);
+    await _downloadDirectMedia(currentUrl);
   }
 
-  Future<void> _downloadAudio(String rawUrl) async {
+  Future<void> _downloadDirectMedia(String url) async {
     if (_isDownloading || !mounted) return;
 
     _isDownloading = true;
 
-    final progressNotifier = ValueNotifier<double>(0.0);
-    final statusText =
-        ValueNotifier<String>('Getting track information...');
+    final progress = ValueNotifier<double>(0);
+    final status = ValueNotifier<String>('Connecting to media server...');
 
     var dialogOpen = false;
     var dialogClosed = false;
-    var savedSuccessfully = false;
-    String? tempFilePath;
-    YoutubeExplode? yt;
+    File? downloadedFile;
 
     void closeDialog() {
       if (!dialogOpen || dialogClosed || !mounted) return;
@@ -176,55 +152,35 @@ class _ExploreScreenState extends State<ExploreScreen> {
       showCupertinoDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (dialogContext) {
+        builder: (_) {
           dialogOpen = true;
 
           return CupertinoAlertDialog(
-            title: const Text('Downloading Track'),
+            title: const Text('Downloading Media'),
             content: Column(
               children: [
-                SizedBox(height: 14.h),
+                SizedBox(height: 16.h),
                 ValueListenableBuilder<double>(
-                  valueListenable: progressNotifier,
-                  builder: (_, progress, __) {
-                    return Column(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 5,
-                            backgroundColor: AppColors.surface,
-                            valueColor:
-                                const AlwaysStoppedAnimation<Color>(
-                              AppColors.lime,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 8.h),
-                        Text(
-                          '${(progress * 100).toInt()}%',
-                          style: TextStyle(
-                            color: AppColors.lime,
-                            fontSize: 12.sp,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+                  valueListenable: progress,
+                  builder: (_, value, __) => LinearProgressIndicator(
+                    value: value > 0 ? value : null,
+                    minHeight: 5,
+                    backgroundColor: AppColors.surface,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.lime,
+                    ),
+                  ),
                 ),
-                SizedBox(height: 8.h),
+                SizedBox(height: 10.h),
                 ValueListenableBuilder<String>(
-                  valueListenable: statusText,
-                  builder: (_, text, __) {
-                    return Text(
-                      text,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12.sp,
-                      ),
-                    );
-                  },
+                  valueListenable: status,
+                  builder: (_, value, __) => Text(
+                    value,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.sp,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -232,184 +188,74 @@ class _ExploreScreenState extends State<ExploreScreen> {
         },
       );
 
-      yt = YoutubeExplode();
+      downloadedFile = await _downloadService.download(
+        url: url,
+        onProgress: (received, total) {
+          if (total > 0) {
+            progress.value = (received / total).clamp(0.0, 1.0);
 
-      final videoId = VideoId(rawUrl);
-
-      statusText.value = 'Getting video information...';
-
-      final video = await yt.videos.get(videoId).timeout(
-        const Duration(seconds: 20),
-        onTimeout: () => throw TimeoutException(
-          'Timed out while getting video information.',
-        ),
-      );
-
-      final trackTitle = video.title.trim().isEmpty
-          ? 'YouTube Audio'
-          : video.title.trim();
-
-      statusText.value = 'Finding audio stream...';
-
-      final manifest =
-          await yt.videos.streamsClient.getManifest(videoId).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => throw TimeoutException(
-          'Timed out while finding audio streams.',
-        ),
-      );
-
-      // Prefer MP4 audio streams for compatibility with common players.
-      // Fall back to another audio-only stream if MP4 is unavailable.
-      final audioStreams = manifest.audioOnly.toList();
-
-      if (audioStreams.isEmpty) {
-        throw Exception('No audio-only stream is available.');
-      }
-
-      final mp4Streams = audioStreams
-          .where((stream) => stream.container == StreamContainer.mp4)
-          .toList()
-        ..sort((a, b) => b.bitrate.compareTo(a.bitrate));
-
-      audioStreams.sort((a, b) => b.bitrate.compareTo(a.bitrate));
-
-      final audioStreamInfo =
-          mp4Streams.isNotEmpty ? mp4Streams.first : audioStreams.first;
-
-      statusText.value = 'Preparing audio file...';
-
-      final tempDir = await getTemporaryDirectory();
-
-      final extension = audioStreamInfo.container.name;
-
-      tempFilePath = p.join(
-        tempDir.path,
-        'audio_${DateTime.now().microsecondsSinceEpoch}.$extension',
-      );
-
-      final file = File(tempFilePath);
-      final sink = file.openWrite();
-
-      final totalBytes = audioStreamInfo.size.totalBytes;
-      var receivedBytes = 0;
-      var lastProgressUpdate = DateTime.now();
-
-      statusText.value = 'Connecting to audio stream...';
-
-      try {
-        final stream = yt.videos.streamsClient
-            .get(audioStreamInfo)
-            .timeout(
-          const Duration(seconds: 30),
-          onTimeout: (eventSink) {
-            eventSink.addError(
-              TimeoutException(
-                'No audio data received for 30 seconds.',
-              ),
-            );
-          },
-        );
-
-        await for (final chunk in stream) {
-          sink.add(chunk);
-          receivedBytes += chunk.length;
-          lastProgressUpdate = DateTime.now();
-
-          if (totalBytes > 0) {
-            final progress =
-                (receivedBytes / totalBytes).clamp(0.0, 1.0);
-
-            progressNotifier.value = progress;
-
-            statusText.value =
-                '${(progress * 100).toInt()}% downloaded '
-                '(${(receivedBytes / (1024 * 1024)).toStringAsFixed(1)} MB)';
+            status.value =
+                '${(progress.value * 100).toInt()}% '
+                '(${(received / (1024 * 1024)).toStringAsFixed(1)} MB)';
           } else {
-            statusText.value =
-                'Downloaded ${(receivedBytes / (1024 * 1024)).toStringAsFixed(1)} MB...';
+            status.value =
+                'Downloaded ${(received / (1024 * 1024)).toStringAsFixed(1)} MB';
           }
-        }
-
-        await sink.flush();
-      } finally {
-        await sink.close();
-      }
-
-      debugPrint(
-        'Audio stream completed. '
-        'Bytes: $receivedBytes / $totalBytes. '
-        'Last update: $lastProgressUpdate',
+        },
       );
 
-      if (receivedBytes == 0) {
-        throw Exception('No audio data was received.');
-      }
+      final extension = p.extension(downloadedFile.path).toLowerCase();
+      
+      // Directly defined the extensions here to bypass the VS Code analyzer error
+      const audioExtensions = {
+        '.mp3',
+        '.m4a',
+        '.aac',
+        '.wav',
+        '.ogg',
+        '.opus',
+        '.flac'
+      };
 
-      if (totalBytes > 0 && receivedBytes < totalBytes) {
-        throw Exception(
-          'Download incomplete: received $receivedBytes of $totalBytes bytes.',
+      if (audioExtensions.contains(extension)) {
+        status.value = 'Adding audio to your library...';
+
+        if (!mounted) return;
+        await context.read<AudioLibraryCubit>().saveTrack(
+          sourcePath: downloadedFile.path,
+          title: p.basenameWithoutExtension(downloadedFile.path),
         );
-      }
 
-      progressNotifier.value = 1.0;
-      statusText.value = 'Saving to your music library...';
+        if (!mounted) return;
+        await context.read<AudioLibraryCubit>().loadTracks();
 
-      await context.read<AudioLibraryCubit>().saveTrack(
-        sourcePath: tempFilePath,
-        title: trackTitle,
-      );
+        await downloadedFile.delete();
+        downloadedFile = null;
 
-      await context.read<AudioLibraryCubit>().loadTracks();
+        progress.value = 1;
+        status.value = 'Download complete!';
+        closeDialog();
 
-      savedSuccessfully = true;
+        _showMessage('Audio saved to My Audios!');
+      } else {
+        progress.value = 1;
+        status.value = 'Video saved successfully!';
+        closeDialog();
 
-      closeDialog();
-
-      _showMessage('Saved "$trackTitle" to My Audios!');
-    } on DioException catch (e, stackTrace) {
-      debugPrint('Download DioException: $e');
-      debugPrintStack(stackTrace: stackTrace);
-
-      closeDialog();
-
-      final message = e.response?.statusCode == 403
-          ? 'The audio stream was blocked (403). Please retry later.'
-          : 'Download failed. Check your connection and try again.';
-
-      if (mounted) {
-        await showCupertinoDialog<void>(
-          context: context,
-          builder: (dialogContext) => CupertinoAlertDialog(
-            title: const Text('Download Notice'),
-            content: Text(message),
-            actions: [
-              CupertinoDialogAction(
-                child: const Text('OK'),
-                onPressed: () => Navigator.pop(dialogContext),
-              ),
-            ],
-          ),
-        );
+        _showMessage('Video saved to the app Downloads directory.');
       }
     } catch (e, stackTrace) {
-      debugPrint('Download error: $e');
+      debugPrint('Direct media download error: $e');
       debugPrintStack(stackTrace: stackTrace);
 
       closeDialog();
-
-      final message = e is TimeoutException
-          ? 'The download timed out because no data arrived. Please retry.'
-          : e.toString().contains('403')
-              ? 'The audio stream was blocked (403). Please retry later.'
-              : 'Download failed: ${e.toString()}';
 
       if (mounted) {
         await showCupertinoDialog<void>(
           context: context,
           builder: (dialogContext) => CupertinoAlertDialog(
-            title: const Text('Download Notice'),
-            content: Text(message),
+            title: const Text('Download Failed'),
+            content: Text(e.toString()),
             actions: [
               CupertinoDialogAction(
                 child: const Text('OK'),
@@ -420,27 +266,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
         );
       }
     } finally {
-      yt?.close();
-
-      if (!savedSuccessfully && tempFilePath != null) {
-        try {
-          final tempFile = File(tempFilePath);
-
-          if (await tempFile.exists()) {
-            await tempFile.delete();
-          }
-        } catch (e) {
-          debugPrint('Temporary file cleanup failed: $e');
-        }
-      }
-
-      if (dialogOpen && !dialogClosed && mounted) {
-        closeDialog();
-      }
-
-      progressNotifier.dispose();
-      statusText.dispose();
-
+      closeDialog();
+      progress.dispose();
+      status.dispose();
       _isDownloading = false;
     }
   }
@@ -448,6 +276,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   @override
   void dispose() {
     _urlController.dispose();
+    _downloadService.dispose();
     super.dispose();
   }
 
@@ -467,8 +296,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               LinearProgressIndicator(
                 value: _pageProgress,
                 backgroundColor: AppColors.surface,
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(AppColors.lime),
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
                 minHeight: 2.h,
               ),
             Expanded(
@@ -488,8 +316,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   onLoadStop: (controller, url) {
                     _updateNavState(url);
                   },
-                  onUpdateVisitedHistory:
-                      (controller, url, isReload) {
+                  onUpdateVisitedHistory: (controller, url, isReload) {
                     if (url != null) {
                       _updateNavState(url);
                     }
@@ -545,9 +372,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         children: [
           CupertinoButton(
             padding: EdgeInsets.zero,
-            onPressed: _canGoBack
-                ? () => _webViewController?.goBack()
-                : null,
+            onPressed: _canGoBack ? () => _webViewController?.goBack() : null,
             child: Icon(
               CupertinoIcons.back,
               color: _canGoBack
@@ -558,9 +383,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ),
           CupertinoButton(
             padding: EdgeInsets.zero,
-            onPressed: _canGoForward
-                ? () => _webViewController?.goForward()
-                : null,
+            onPressed:
+                _canGoForward ? () => _webViewController?.goForward() : null,
             child: Icon(
               CupertinoIcons.forward,
               color: _canGoForward
@@ -612,8 +436,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           SizedBox(width: 4.w),
           CupertinoButton(
             padding: EdgeInsets.symmetric(horizontal: 6.w),
-            onPressed:
-                _isDownloading ? null : _handleDownloadCurrentPage,
+            onPressed: _isDownloading ? null : _handleDownloadCurrentPage,
             child: Container(
               padding: EdgeInsets.all(6.w),
               decoration: BoxDecoration(
