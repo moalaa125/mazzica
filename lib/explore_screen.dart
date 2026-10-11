@@ -1,4 +1,3 @@
-
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
@@ -31,7 +30,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   final String _initialUrl = 'https://m.youtube.com';
 
   late final InAppWebViewSettings _settings;
-  final Dio _dio = Dio();
 
   @override
   void initState() {
@@ -92,14 +90,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
     if (currentUrl == null || currentUrl.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No webpage loaded!')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No webpage loaded!')));
       }
       return;
     }
 
-    final isYouTubeVideo = currentUrl.contains('watch?v=') ||
+    final isYouTubeVideo =
+        currentUrl.contains('watch?v=') ||
         currentUrl.contains('youtu.be/') ||
         currentUrl.contains('/shorts/');
 
@@ -121,7 +120,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _downloadAudio(currentUrl);
   }
 
-  // التنزيل السريع المباشر وتفادي قيود يوتيوب
   Future<void> _downloadAudio(String rawUrl) async {
     final progressNotifier = ValueNotifier<double>(0.0);
     final statusText = ValueNotifier<String>('Getting track info...');
@@ -163,16 +161,23 @@ class _ExploreScreenState extends State<ExploreScreen> {
     try {
       final videoId = VideoId(rawUrl);
 
-      // جلب عنوان وتفاصيل الفيديو
-      final video = await yt.videos.get(videoId).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw 'Could not connect to YouTube.',
-      );
+      final video = await yt.videos
+          .get(videoId)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw 'Could not connect to YouTube.',
+          );
 
-      final trackTitle =
-          video.title.trim().isEmpty ? 'YouTube Audio' : video.title.trim();
+      final trackTitle = video.title.trim().isEmpty
+          ? 'YouTube Audio'
+          : video.title.trim();
 
-      statusText.value = 'Connecting to fast audio server...';
+      statusText.value = 'Extracting audio streams...';
+
+      final manifest = await yt.videos.streamsClient.getManifest(videoId);
+      final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
+
+      statusText.value = 'Downloading audio file...';
 
       final tempDir = await getTemporaryDirectory();
       final tempFilePath = p.join(
@@ -180,95 +185,43 @@ class _ExploreScreenState extends State<ExploreScreen> {
         'audio_${DateTime.now().microsecondsSinceEpoch}.m4a',
       );
 
-      String? directDownloadUrl;
+      final file = File(tempFilePath);
+      final sink = file.openWrite();
+      final totalBytes = audioStreamInfo.size.totalBytes;
+      var receivedBytes = 0;
 
-      // 🔥 قائمة موثوقة وعاملة لخوادم Invidious API لتخطي 403 وحظر السرعة
-      final invidiousInstances = [
-        'https://inv.tux.pizza',
-        'https://yewtu.be',
-        'https://invidious.nerdvpn.de',
-        'https://invidious.projectsegfau.lt',
-      ];
-
-      for (final host in invidiousInstances) {
-        try {
-          final res = await _dio.get(
-            '$host/api/v1/videos/${videoId.value}',
-            options: Options(
-              headers: {'Accept': 'application/json'},
-              responseType: ResponseType.json,
-            ),
-          ).timeout(const Duration(seconds: 5));
-
-          if (res.statusCode == 200 && res.data['formatStreams'] != null) {
-            final List streams = res.data['formatStreams'];
-            if (streams.isNotEmpty) {
-              final audio = streams.firstWhere(
-                (s) => (s['type'] as String? ?? '').contains('audio'),
-                orElse: () => streams.first,
-              );
-              directDownloadUrl = audio['url'] as String?;
-              if (directDownloadUrl != null && directDownloadUrl.isNotEmpty) {
-                break;
-              }
-            }
-          }
-        } catch (_) {
-          continue;
+      final stream = yt.videos.streamsClient.get(audioStreamInfo);
+      await for (final chunk in stream) {
+        sink.add(chunk);
+        receivedBytes += chunk.length;
+        if (totalBytes > 0) {
+          progressNotifier.value = (receivedBytes / totalBytes).clamp(0.0, 1.0);
+          statusText.value =
+              '${(progressNotifier.value * 100).toInt()}% downloaded';
+        } else {
+          statusText.value =
+              'Downloaded ${(receivedBytes / (1024 * 1024)).toStringAsFixed(1)} MB...';
         }
       }
-
-      // إذا لم يستجب سيرفر خارجي، نأخذ رابط الصوت المباشر من يوتيوب
-      if (directDownloadUrl == null) {
-        statusText.value = 'Extracting audio streams...';
-        final manifest = await yt.videos.streamsClient.getManifest(videoId);
-        final audioStreamInfo = manifest.audioOnly.withHighestBitrate();
-        directDownloadUrl = audioStreamInfo.url.toString();
-      }
-
-      statusText.value = 'Downloading audio file...';
-
-      // 🔥 التنزيل عبر Dio مع ترويسة Range: bytes=0- لكسر خنق يوتيوب (Throttle Bypass)
-      await _dio.download(
-        directDownloadUrl,
-        tempFilePath,
-        options: Options(
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Range': 'bytes=0-',
-          },
-        ),
-        onReceiveProgress: (received, total) {
-          if (total > 0) {
-            progressNotifier.value = (received / total).clamp(0.0, 1.0);
-            statusText.value =
-                '${(progressNotifier.value * 100).toInt()}% downloaded';
-          } else {
-            final mb = (received / (1024 * 1024)).toStringAsFixed(1);
-            statusText.value = 'Downloaded $mb MB...';
-          }
-        },
-      );
+      await sink.flush();
+      await sink.close();
 
       statusText.value = 'Saving to your music library...';
 
-      // الحفظ المباشر داخل مكتبة التطبيق
       await context.read<AudioLibraryCubit>().saveTrack(
-            sourcePath: tempFilePath,
-            title: trackTitle,
-          );
+        sourcePath: tempFilePath,
+        title: trackTitle,
+      );
 
       await context.read<AudioLibraryCubit>().loadTracks();
 
-      // تنظيف الملف المؤقت
       final tempFile = File(tempFilePath);
       if (await tempFile.exists()) {
         await tempFile.delete();
       }
 
       if (mounted) {
-        Navigator.pop(context); // إغلاق الدايالوج
+        Navigator.pop(context); 
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -281,15 +234,39 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ),
         );
       }
+    } on DioException catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        final msg = e.response?.statusCode == 403
+            ? 'YouTube blocked this stream (403). Try another video or retry later.'
+            : 'Download failed. Please check your connection and try again.';
+        showCupertinoDialog(
+          context: context,
+          builder: (ctx) => CupertinoAlertDialog(
+            title: const Text('Download Notice'),
+            content: Text(msg),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('OK'),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
+
+        final cleanMsg = e.toString().contains('403')
+            ? 'YouTube blocked this stream (403). Try another video or retry later.'
+            : 'Download failed. Please try again.';
 
         showCupertinoDialog(
           context: context,
           builder: (ctx) => CupertinoAlertDialog(
             title: const Text('Download Notice'),
-            content: Text('Download failed: $e'),
+            content: Text(cleanMsg),
             actions: [
               CupertinoDialogAction(
                 child: const Text('OK'),
@@ -307,7 +284,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   @override
   void dispose() {
     _urlController.dispose();
-    _dio.close();
     super.dispose();
   }
 
@@ -353,16 +329,16 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   },
                   shouldOverrideUrlLoading:
                       (controller, navigationAction) async {
-                    final uri = navigationAction.request.url;
-                    if (uri == null) return NavigationActionPolicy.CANCEL;
+                        final uri = navigationAction.request.url;
+                        if (uri == null) return NavigationActionPolicy.CANCEL;
 
-                    final scheme = uri.scheme.toLowerCase();
-                    if (scheme != 'http' && scheme != 'https') {
-                      return NavigationActionPolicy.CANCEL;
-                    }
+                        final scheme = uri.scheme.toLowerCase();
+                        if (scheme != 'http' && scheme != 'https') {
+                          return NavigationActionPolicy.CANCEL;
+                        }
 
-                    return NavigationActionPolicy.ALLOW;
-                  },
+                        return NavigationActionPolicy.ALLOW;
+                      },
                 ),
               ),
             ),
@@ -399,8 +375,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ),
           CupertinoButton(
             padding: EdgeInsets.zero,
-            onPressed:
-                _canGoForward ? () => _webViewController?.goForward() : null,
+            onPressed: _canGoForward
+                ? () => _webViewController?.goForward()
+                : null,
             child: Icon(
               CupertinoIcons.forward,
               color: _canGoForward
