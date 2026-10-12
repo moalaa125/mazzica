@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
@@ -8,10 +7,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:dio/dio.dart';
 
 import 'package:mazzica/constants/app_color.dart';
 import 'package:mazzica/cubits/audio_library_cubit.dart';
-import 'package:mazzica/services/direct_media_download_service.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -23,23 +23,24 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen> {
   InAppWebViewController? _webViewController;
   final TextEditingController _urlController = TextEditingController();
-
-  final DirectMediaDownloadService _downloadService =
-      DirectMediaDownloadService();
+  final Dio _dio = Dio();
 
   double _pageProgress = 0.0;
   bool _canGoBack = false;
   bool _canGoForward = false;
   bool _isDownloading = false;
 
-  final String _initialUrl = 'https://m.youtube.com';
+  static const _initialUrl = 'https://www.google.com';
+
+  static const _audioExtensions = {
+    '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.flac',
+  };
 
   late final InAppWebViewSettings _settings;
 
   @override
   void initState() {
     super.initState();
-
     _urlController.text = _initialUrl;
 
     _settings = InAppWebViewSettings(
@@ -49,62 +50,51 @@ class _ExploreScreenState extends State<ExploreScreen> {
       useHybridComposition: true,
       transparentBackground: true,
       supportZoom: true,
-      applicationNameForUserAgent:
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) '
-          'AppleWebKit/605.1.15 (KHTML, like Gecko) '
-          'Version/16.0 Mobile/15E148 Safari/604.1',
     );
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    _dio.close();
+    super.dispose();
   }
 
   void _showMessage(String message) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: AppColors.surface,
-        content: Text(
-          message,
-          style: const TextStyle(color: AppColors.lime),
-        ),
+        content: Text(message, style: const TextStyle(color: AppColors.lime)),
       ),
     );
   }
 
   void _loadUrl(String input) {
-    String formattedUrl = input.trim();
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return;
 
-    if (formattedUrl.isEmpty) return;
-
-    if (!formattedUrl.startsWith('http://') &&
-        !formattedUrl.startsWith('https://')) {
-      if (formattedUrl.contains('.') && !formattedUrl.contains(' ')) {
-        formattedUrl = 'https://$formattedUrl';
-      } else {
-        formattedUrl =
-            'https://www.google.com/search?q=${Uri.encodeComponent(formattedUrl)}';
-      }
+    String target = trimmed;
+    if (!target.startsWith('http://') && !target.startsWith('https://')) {
+      final looksLikeDomain = target.contains('.') && !target.contains(' ');
+      target = looksLikeDomain
+          ? 'https://$target'
+          : 'https://www.google.com/search?q=${Uri.encodeComponent(target)}';
     }
 
-    _webViewController?.loadUrl(
-      urlRequest: URLRequest(url: WebUri(formattedUrl)),
-    );
+    _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(target)));
   }
 
   Future<void> _updateNavState(WebUri? url) async {
     final controller = _webViewController;
-
     if (controller == null) return;
 
     try {
       final canGoBack = await controller.canGoBack();
       final canGoForward = await controller.canGoForward();
-
-      if (url != null) {
-        _urlController.text = url.toString();
-      }
+      if (url != null) _urlController.text = url.toString();
 
       if (!mounted) return;
-
       setState(() {
         _canGoBack = canGoBack;
         _canGoForward = canGoForward;
@@ -114,86 +104,79 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  Future<void> _handleDownloadCurrentPage() async {
+  // ---------------------------------------------------------------------
+  // Generic direct-file download handler.
+  // Fires only when the page itself serves a real downloadable file
+  // (DownloadStartRequest from the native webview), never by scraping
+  // or extracting streams from a page's playable content.
+  // ---------------------------------------------------------------------
+  Future<void> _handleDirectDownload(DownloadStartRequest request) async {
     if (_isDownloading) return;
-
-    final currentUrl = (await _webViewController?.getUrl())?.toString();
-
-    if (!mounted) return;
-
-    if (currentUrl == null || currentUrl.isEmpty) {
-      _showMessage('No URL available.');
-      return;
-    }
-
-    await _downloadDirectMedia(currentUrl);
-  }
-
-  Future<void> _downloadDirectMedia(String url) async {
-    if (_isDownloading || !mounted) return;
-
     _isDownloading = true;
 
-    final progress = ValueNotifier<double>(0);
-    final status = ValueNotifier<String>('Connecting to media server...');
+    final url = request.url.toString();
+    final suggestedName = request.suggestedFilename?.trim();
+    final extension = p.extension(
+      suggestedName?.isNotEmpty == true ? suggestedName! : url,
+    ).toLowerCase();
 
-    var dialogOpen = false;
+    final progress = ValueNotifier<double>(0);
+    final status = ValueNotifier<String>('Starting download...');
     var dialogClosed = false;
-    File? downloadedFile;
 
     void closeDialog() {
-      if (!dialogOpen || dialogClosed || !mounted) return;
-
+      if (dialogClosed || !mounted) return;
       dialogClosed = true;
       Navigator.of(context, rootNavigator: true).pop();
     }
 
-    try {
-      showCupertinoDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) {
-          dialogOpen = true;
-
-          return CupertinoAlertDialog(
-            title: const Text('Downloading Media'),
-            content: Column(
-              children: [
-                SizedBox(height: 16.h),
-                ValueListenableBuilder<double>(
-                  valueListenable: progress,
-                  builder: (_, value, __) => LinearProgressIndicator(
-                    value: value > 0 ? value : null,
-                    minHeight: 5,
-                    backgroundColor: AppColors.surface,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      AppColors.lime,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 10.h),
-                ValueListenableBuilder<String>(
-                  valueListenable: status,
-                  builder: (_, value, __) => Text(
-                    value,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12.sp,
-                    ),
-                  ),
-                ),
-              ],
+    showCupertinoDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CupertinoAlertDialog(
+        title: const Text('Downloading File'),
+        content: Column(
+          children: [
+            SizedBox(height: 16.h),
+            ValueListenableBuilder<double>(
+              valueListenable: progress,
+              builder: (_, value, __) => LinearProgressIndicator(
+                value: value > 0 ? value : null,
+                minHeight: 5,
+                backgroundColor: AppColors.surface,
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.lime),
+              ),
             ),
-          );
-        },
-      );
+            SizedBox(height: 10.h),
+            ValueListenableBuilder<String>(
+              valueListenable: status,
+              builder: (_, value, __) => Text(
+                value,
+                style:
+                    TextStyle(color: AppColors.textSecondary, fontSize: 12.sp),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
 
-      downloadedFile = await _downloadService.download(
-        url: url,
-        onProgress: (received, total) {
+    File? downloadedFile;
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final fileName = (suggestedName?.isNotEmpty == true)
+          ? suggestedName!
+          : 'download_${DateTime.now().microsecondsSinceEpoch}$extension';
+      final tempPath = p.join(tempDir.path, fileName);
+
+      await _dio.download(
+        url,
+        tempPath,
+        onReceiveProgress: (received, total) {
           if (total > 0) {
             progress.value = (received / total).clamp(0.0, 1.0);
-
             status.value =
                 '${(progress.value * 100).toInt()}% '
                 '(${(received / (1024 * 1024)).toStringAsFixed(1)} MB)';
@@ -204,27 +187,16 @@ class _ExploreScreenState extends State<ExploreScreen> {
         },
       );
 
-      final extension = p.extension(downloadedFile.path).toLowerCase();
-      
-      // Directly defined the extensions here to bypass the VS Code analyzer error
-      const audioExtensions = {
-        '.mp3',
-        '.m4a',
-        '.aac',
-        '.wav',
-        '.ogg',
-        '.opus',
-        '.flac'
-      };
+      downloadedFile = File(tempPath);
 
-      if (audioExtensions.contains(extension)) {
-        status.value = 'Adding audio to your library...';
-
+      if (_audioExtensions.contains(extension)) {
+        status.value = 'Adding to your library...';
         if (!mounted) return;
+
         await context.read<AudioLibraryCubit>().saveTrack(
-          sourcePath: downloadedFile.path,
-          title: p.basenameWithoutExtension(downloadedFile.path),
-        );
+              sourcePath: tempPath,
+              title: p.basenameWithoutExtension(fileName),
+            );
 
         if (!mounted) return;
         await context.read<AudioLibraryCubit>().loadTracks();
@@ -232,23 +204,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
         await downloadedFile.delete();
         downloadedFile = null;
 
-        progress.value = 1;
-        status.value = 'Download complete!';
         closeDialog();
-
         _showMessage('Audio saved to My Audios!');
       } else {
-        progress.value = 1;
-        status.value = 'Video saved successfully!';
         closeDialog();
-
-        _showMessage('Video saved to the app Downloads directory.');
+        _showMessage('File downloaded: $fileName');
       }
-    } catch (e, stackTrace) {
-      debugPrint('Direct media download error: $e');
-      debugPrintStack(stackTrace: stackTrace);
-
+    } catch (e) {
+      debugPrint('Download error: $e');
       closeDialog();
+
+      if (downloadedFile != null && await downloadedFile.exists()) {
+        await downloadedFile.delete();
+      }
 
       if (mounted) {
         await showCupertinoDialog<void>(
@@ -274,13 +242,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   @override
-  void dispose() {
-    _urlController.dispose();
-    _downloadService.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
     final bottomInset = 74.h + 68.h + bottomPadding + 10.h;
@@ -296,48 +257,40 @@ class _ExploreScreenState extends State<ExploreScreen> {
               LinearProgressIndicator(
                 value: _pageProgress,
                 backgroundColor: AppColors.surface,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.lime),
                 minHeight: 2.h,
               ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.only(bottom: bottomInset),
                 child: InAppWebView(
-                  initialUrlRequest: URLRequest(
-                    url: WebUri(_initialUrl),
-                  ),
+                  initialUrlRequest: URLRequest(url: WebUri(_initialUrl)),
                   initialSettings: _settings,
-                  onWebViewCreated: (controller) {
-                    _webViewController = controller;
-                  },
-                  onLoadStart: (controller, url) {
-                    _updateNavState(url);
-                  },
-                  onLoadStop: (controller, url) {
-                    _updateNavState(url);
-                  },
+                  onWebViewCreated: (controller) =>
+                      _webViewController = controller,
+                  onLoadStart: (controller, url) => _updateNavState(url),
+                  onLoadStop: (controller, url) => _updateNavState(url),
                   onUpdateVisitedHistory: (controller, url, isReload) {
-                    if (url != null) {
-                      _updateNavState(url);
-                    }
+                    if (url != null) _updateNavState(url);
                   },
                   onProgressChanged: (controller, progress) {
                     if (!mounted) return;
-
-                    setState(() {
-                      _pageProgress = progress / 100;
-                    });
+                    setState(() => _pageProgress = progress / 100);
+                  },
+                  // This fires ONLY when the browser engine detects a real
+                  // file download response from the server (e.g.
+                  // Content-Disposition: attachment, or a direct file link).
+                  // It never triggers for playable video/audio streams.
+                  onDownloadStartRequest: (controller, request) {
+                    _handleDirectDownload(request);
                   },
                   shouldOverrideUrlLoading:
                       (controller, navigationAction) async {
                     final uri = navigationAction.request.url;
-
-                    if (uri == null) {
-                      return NavigationActionPolicy.CANCEL;
-                    }
+                    if (uri == null) return NavigationActionPolicy.CANCEL;
 
                     final scheme = uri.scheme.toLowerCase();
-
                     if (scheme != 'http' && scheme != 'https') {
                       return NavigationActionPolicy.CANCEL;
                     }
@@ -355,10 +308,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Widget _buildTopBar() {
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 8.w,
-        vertical: 8.h,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(
@@ -411,15 +361,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   color: AppColors.textSecondary.withValues(alpha: 0.5),
                   fontSize: 13.sp,
                 ),
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13.sp,
-                ),
+                style:
+                    TextStyle(color: AppColors.textPrimary, fontSize: 13.sp),
                 cursorColor: AppColors.lime,
                 padding: EdgeInsets.symmetric(horizontal: 10.w),
-                decoration: const BoxDecoration(
-                  color: Colors.transparent,
-                ),
+                decoration: const BoxDecoration(color: Colors.transparent),
                 textInputAction: TextInputAction.go,
                 onSubmitted: _loadUrl,
                 prefix: Padding(
@@ -434,22 +380,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
           ),
           SizedBox(width: 4.w),
-          CupertinoButton(
-            padding: EdgeInsets.symmetric(horizontal: 6.w),
-            onPressed: _isDownloading ? null : _handleDownloadCurrentPage,
-            child: Container(
-              padding: EdgeInsets.all(6.w),
-              decoration: BoxDecoration(
-                color: AppColors.lime.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                CupertinoIcons.arrow_down_to_line,
-                color: AppColors.lime,
-                size: 18,
-              ),
-            ),
-          ),
           CupertinoButton(
             padding: EdgeInsets.zero,
             onPressed: () => _webViewController?.reload(),
