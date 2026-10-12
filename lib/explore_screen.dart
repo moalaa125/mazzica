@@ -54,7 +54,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _addressController.text = _homeUrl;
     _webSettings = InAppWebViewSettings(
       javaScriptEnabled: true,
-      javaScriptCanOpenWindowsAutomatically: true,
+      // Prevent pages from automatically spawning windows that may be
+      // handed off to another app. Keep navigation inside this WebView.
+      javaScriptCanOpenWindowsAutomatically: false,
+      supportMultipleWindows: false,
       useShouldOverrideUrlLoading: true,
       allowsInlineMediaPlayback: true,
       mediaPlaybackRequiresUserGesture: true,
@@ -419,14 +422,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Future<bool> _handlePopup(CreateWindowAction action) async {
-    // Sites often use target="_blank". Load ordinary web links in this same
-    // WebView instead of opening another app/window.
+    // Never allow a popup request to fall through to the operating system.
+    // If it has a normal web URL, navigate the existing Mazzica WebView.
     final target = action.request.url;
     if (_isWebUri(target)) {
       await _webController?.loadUrl(urlRequest: URLRequest(url: target));
-      return true;
     }
-    return false;
+    // Return true even for unsupported/custom schemes so the popup is handled
+    // here instead of being delegated to YouTube or another installed app.
+    return true;
   }
 
   @override
