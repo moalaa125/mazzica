@@ -13,6 +13,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:mazzica/constants/app_color.dart';
 import 'package:mazzica/cubits/audio_library_cubit.dart';
 
+/// In-app browser for Mazzica.
+///
+/// Supported downloads:
+/// - Direct media URLs that return an actual audio file.
+/// - Ordinary downloadable files explicitly exposed by a website.
+///
+/// This intentionally does not extract audio/video streams from YouTube pages
+/// or bypass a website's download restrictions.
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
 
@@ -21,189 +29,237 @@ class ExploreScreen extends StatefulWidget {
 }
 
 class _ExploreScreenState extends State<ExploreScreen> {
-  InAppWebViewController? _webViewController;
-  final TextEditingController _urlController = TextEditingController();
+  static const String _homeUrl = 'https://www.google.com';
+  static const Set<String> _audioExtensions = {
+    '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.flac', '.aiff', '.aif',
+  };
+
+  final TextEditingController _addressController = TextEditingController();
   final Dio _dio = Dio();
+
+  InAppWebViewController? _webController;
+  CancelToken? _activeDownload;
 
   double _pageProgress = 0;
   bool _canGoBack = false;
   bool _canGoForward = false;
   bool _isDownloading = false;
+  bool _isPageLoading = true;
 
-  static const String _initialUrl = 'https://www.google.com';
-  static const Set<String> _audioExtensions = {
-    '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.flac',
-  };
-
-  late final InAppWebViewSettings _settings;
+  late final InAppWebViewSettings _webSettings;
 
   @override
   void initState() {
     super.initState();
-    _urlController.text = _initialUrl;
-    _settings = InAppWebViewSettings(
-      isInspectable: kDebugMode,
+    _addressController.text = _homeUrl;
+    _webSettings = InAppWebViewSettings(
+      javaScriptEnabled: true,
+      javaScriptCanOpenWindowsAutomatically: true,
+      useShouldOverrideUrlLoading: true,
       allowsInlineMediaPlayback: true,
       mediaPlaybackRequiresUserGesture: true,
-      useHybridComposition: true,
-      transparentBackground: true,
       supportZoom: true,
-      javaScriptEnabled: true,
-      useShouldOverrideUrlLoading: true,
-      // Keep web content in this WebView. Non-http(s) app/deep links are blocked.
+      transparentBackground: true,
+      useHybridComposition: true,
+      isInspectable: kDebugMode,
+      // Never hand a website's custom app/deep-link scheme to another app.
+      // HTTP and HTTPS navigation is handled by shouldOverrideUrlLoading.
     );
   }
 
   @override
   void dispose() {
-    _urlController.dispose();
+    _activeDownload?.cancel('ExploreScreen disposed');
+    _addressController.dispose();
     _dio.close(force: true);
     super.dispose();
   }
 
-  void _showMessage(String message) {
+  void _message(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppColors.surface,
-        content: Text(message, style: const TextStyle(color: AppColors.lime)),
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.surface,
+          content: Text(
+            message,
+            style: const TextStyle(color: AppColors.textPrimary),
+          ),
+        ),
+      );
   }
 
-  void _loadUrl(String input) {
-    final value = input.trim();
-    if (value.isEmpty) return;
+  Uri? _resolveAddress(String raw) {
+    final input = raw.trim();
+    if (input.isEmpty) return null;
 
-    String target = value;
-    final parsed = Uri.tryParse(value);
-    final hasHttpScheme = parsed != null &&
-        (parsed.scheme == 'http' || parsed.scheme == 'https');
-
-    if (!hasHttpScheme) {
-      final looksLikeDomain = value.contains('.') && !value.contains(' ');
-      target = looksLikeDomain
-          ? 'https://$value'
-          : 'https://www.google.com/search?q=${Uri.encodeQueryComponent(value)}';
+    final parsed = Uri.tryParse(input);
+    if (parsed != null &&
+        (parsed.scheme.toLowerCase() == 'http' ||
+            parsed.scheme.toLowerCase() == 'https') &&
+        parsed.host.isNotEmpty) {
+      return parsed;
     }
 
-    _webViewController?.loadUrl(
-      urlRequest: URLRequest(url: WebUri(target)),
-    );
+    // Treat a simple domain as a URL; otherwise search Google.
+    final looksLikeDomain =
+        !input.contains(RegExp(r'\s')) && input.contains('.') && !input.startsWith('.');
+    if (looksLikeDomain) {
+      final withScheme = Uri.tryParse('https://$input');
+      if (withScheme != null && withScheme.host.contains('.')) return withScheme;
+    }
+
+    return Uri.https('www.google.com', '/search', {'q': input});
   }
 
-  Future<void> _updateNavState(WebUri? url) async {
-    final controller = _webViewController;
+  Future<void> _navigate(String raw) async {
+    final uri = _resolveAddress(raw);
+    if (uri == null) {
+      _message('Enter a website or search term first.');
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    await _webController?.loadUrl(urlRequest: URLRequest(url: WebUri(uri.toString())));
+  }
+
+  Future<void> _refreshNavigationState(WebUri? currentUrl) async {
+    final controller = _webController;
     if (controller == null) return;
     try {
       final back = await controller.canGoBack();
       final forward = await controller.canGoForward();
-      if (url != null) _urlController.text = url.toString();
       if (!mounted) return;
       setState(() {
         _canGoBack = back;
         _canGoForward = forward;
+        if (currentUrl != null) _addressController.text = currentUrl.toString();
       });
-    } catch (e) {
-      debugPrint('Navigation state error: $e');
+    } catch (error) {
+      debugPrint('Browser navigation state error: $error');
     }
   }
 
-  String _safeFileName(String proposed, String fallbackExtension) {
-    var name = p.basename(proposed.trim());
+  bool _isWebUri(WebUri? webUri) {
+    if (webUri == null) return false;
+    final uri = Uri.tryParse(webUri.toString());
+    return uri != null &&
+        (uri.scheme.toLowerCase() == 'http' ||
+            uri.scheme.toLowerCase() == 'https') &&
+        uri.host.isNotEmpty;
+  }
+
+  String _cleanFileName(String candidate, {String fallback = 'download.bin'}) {
+    var name = p.basename(candidate.trim());
     name = name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_');
-    if (name.isEmpty || name == '.' || name == '..') {
-      name = 'download_${DateTime.now().millisecondsSinceEpoch}$fallbackExtension';
+    if (name.isEmpty || name == '.' || name == '..') name = fallback;
+    // Avoid accidental hidden files and excessively long names.
+    if (name.startsWith('.')) name = 'download_$name';
+    if (name.length > 140) {
+      final extension = p.extension(name);
+      final base = p.basenameWithoutExtension(name);
+      name = '${base.substring(0, base.length.clamp(0, 120).toInt())}$extension';
     }
     return name;
   }
 
   Future<void> _handleWebViewDownload(DownloadStartRequest request) async {
     final uri = Uri.tryParse(request.url.toString());
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      _showMessage('This download link is not supported.');
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      _message('This download link is not supported.');
       return;
     }
 
-    final suggested = request.suggestedFilename?.trim() ?? '';
+    final suggestedName = request.suggestedFilename?.trim() ?? '';
     final urlExtension = p.extension(uri.path).toLowerCase();
-    final suggestedExtension = p.extension(suggested).toLowerCase();
-    final extension = suggestedExtension.isNotEmpty
-        ? suggestedExtension
-        : urlExtension;
-    final fallback = extension.isNotEmpty ? extension : '.bin';
-    final name = _safeFileName(
-      suggested.isNotEmpty ? suggested : p.basename(uri.path),
-      fallback,
+    final suggestedExtension = p.extension(suggestedName).toLowerCase();
+    final extension = suggestedExtension.isNotEmpty ? suggestedExtension : urlExtension;
+    final fallbackExtension = extension.isNotEmpty ? extension : '.bin';
+    final name = _cleanFileName(
+      suggestedName.isNotEmpty ? suggestedName : p.basename(uri.path),
+      fallback: 'download_${DateTime.now().millisecondsSinceEpoch}$fallbackExtension',
     );
 
-    await _downloadFile(uri, name, expectedAudio: _audioExtensions.contains(extension));
+    await _downloadFile(
+      uri,
+      name,
+      expectAudio: _audioExtensions.contains(extension),
+    );
   }
 
-  Future<void> _downloadCurrentPage() async {
-    final controller = _webViewController;
-    if (controller == null || _isDownloading) return;
-
-    final webUri = await controller.getUrl();
-    if (webUri == null) {
-      _showMessage('Open a download link first.');
+  Future<void> _downloadButtonPressed() async {
+    if (_isDownloading) return;
+    final controller = _webController;
+    if (controller == null) {
+      _message('The browser is still starting. Try again in a moment.');
       return;
     }
 
-    final uri = Uri.tryParse(webUri.toString());
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      _showMessage('This page cannot be downloaded.');
+    final current = await controller.getUrl();
+    if (!_isWebUri(current)) {
+      _message('Open a valid web link first.');
       return;
     }
 
+    final uri = Uri.parse(current!.toString());
     final extension = p.extension(uri.path).toLowerCase();
     if (!_audioExtensions.contains(extension)) {
-      _showMessage(
-        'This page is not a direct audio file. Open a legal direct audio download link instead.',
+      _message(
+        'This page is not a direct audio file. Use a website-provided download link for audio you are allowed to save.',
       );
       return;
     }
 
-    final name = _safeFileName(
-      p.basename(uri.path),
-      extension,
+    await _downloadFile(
+      uri,
+      _cleanFileName(
+        p.basename(uri.path),
+        fallback: 'audio_${DateTime.now().millisecondsSinceEpoch}$extension',
+      ),
+      expectAudio: true,
     );
-    await _downloadFile(uri, name, expectedAudio: true);
   }
 
   Future<void> _downloadFile(
     Uri uri,
     String fileName, {
-    required bool expectedAudio,
+    required bool expectAudio,
   }) async {
     if (_isDownloading) {
-      _showMessage('A download is already in progress.');
+      _message('A download is already in progress.');
       return;
     }
     if (!mounted) return;
 
-    setState(() => _isDownloading = true);
     final progress = ValueNotifier<double>(0);
-    final status = ValueNotifier<String>('Connecting…');
+    final status = ValueNotifier<String>('Connecting to server…');
     final cancelToken = CancelToken();
-    bool dialogWasShown = false;
-    bool dialogWasClosed = false;
-    String? tempPath;
-    var preserveDownloadedFile = false;
+    _activeDownload = cancelToken;
+    setState(() => _isDownloading = true);
 
-    void closeProgressDialog() {
-      if (!dialogWasShown || dialogWasClosed || !mounted) return;
-      dialogWasClosed = true;
+    bool dialogClosed = false;
+    String? tempPath;
+    String? finalPath;
+    bool keepFile = false;
+
+    void closeDialog() {
+      if (dialogClosed || !mounted) return;
+      dialogClosed = true;
       final navigator = Navigator.of(context, rootNavigator: true);
       if (navigator.canPop()) navigator.pop();
     }
 
     try {
+      // A dedicated progress dialog keeps the browser responsive and lets the
+      // user cancel a slow or stalled request.
       showCupertinoDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('Downloading'),
+          title: Text(expectAudio ? 'Saving audio' : 'Downloading file'),
           content: Padding(
             padding: EdgeInsets.only(top: 14.h),
             child: Column(
@@ -211,11 +267,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
               children: [
                 ValueListenableBuilder<double>(
                   valueListenable: progress,
-                  builder: (_, value, __) => LinearProgressIndicator(
-                    value: value > 0 ? value : null,
-                    minHeight: 5,
-                    backgroundColor: AppColors.surface,
-                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
+                  builder: (_, value, __) => ClipRRect(
+                    borderRadius: BorderRadius.circular(6.r),
+                    child: LinearProgressIndicator(
+                      value: value > 0 ? value : null,
+                      minHeight: 5.h,
+                      backgroundColor: AppColors.surface,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
+                    ),
                   ),
                 ),
                 SizedBox(height: 10.h),
@@ -223,6 +282,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   valueListenable: status,
                   builder: (_, value, __) => Text(
                     value,
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 12.sp),
                   ),
                 ),
@@ -234,20 +294,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
               onPressed: () {
                 cancelToken.cancel('Cancelled by user');
                 Navigator.of(dialogContext).pop();
-                dialogWasClosed = true;
+                dialogClosed = true;
               },
               child: const Text('Cancel'),
             ),
           ],
         ),
       );
-      dialogWasShown = true;
 
-      final tempDir = await getTemporaryDirectory();
-      tempPath = p.join(
-        tempDir.path,
-        '${DateTime.now().microsecondsSinceEpoch}_${_safeFileName(fileName, '.bin')}',
-      );
+      final tempDirectory = await getTemporaryDirectory();
+      final uniquePrefix = DateTime.now().microsecondsSinceEpoch;
+      tempPath = p.join(tempDirectory.path, '${uniquePrefix}_$fileName');
 
       final response = await _dio.download(
         uri.toString(),
@@ -256,97 +313,126 @@ class _ExploreScreenState extends State<ExploreScreen> {
         deleteOnError: true,
         options: Options(
           followRedirects: true,
-          receiveTimeout: const Duration(minutes: 5),
+          receiveTimeout: const Duration(minutes: 8),
           sendTimeout: const Duration(seconds: 30),
           headers: const {'Accept': '*/*'},
           validateStatus: (code) => code != null && code >= 200 && code < 300,
         ),
         onReceiveProgress: (received, total) {
           if (total > 0) {
-            progress.value = (received / total).clamp(0.0, 1.0);
-            status.value = '${(progress.value * 100).round()}% · '
+            final fraction = (received / total).clamp(0.0, 1.0);
+            progress.value = fraction;
+            status.value = '${(fraction * 100).round()}% · '
                 '${(received / (1024 * 1024)).toStringAsFixed(1)} MB';
           } else {
-            status.value = 'Downloaded ${(received / (1024 * 1024)).toStringAsFixed(1)} MB';
+            status.value = 'Received ${(received / (1024 * 1024)).toStringAsFixed(1)} MB';
           }
         },
       );
 
-      if (response.statusCode == null ||
-          response.statusCode! < 200 ||
-          response.statusCode! >= 300) {
-        throw Exception('The server did not return a successful download.');
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode < 200 || statusCode >= 300) {
+        throw Exception('The server returned HTTP $statusCode.');
       }
 
-      final file = File(tempPath);
-      if (!await file.exists() || await file.length() == 0) {
-        throw Exception('The downloaded file is empty.');
+      final downloaded = File(tempPath);
+      if (!await downloaded.exists() || await downloaded.length() == 0) {
+        throw Exception('The server returned an empty file.');
       }
 
-      final contentType = response.headers.value(Headers.contentTypeHeader)?.toLowerCase() ?? '';
-      if (expectedAudio &&
-          (contentType.contains('text/html') || contentType.contains('application/json'))) {
-        throw Exception('The link returned a webpage instead of an audio file.');
+      final contentType =
+          (response.headers.value(Headers.contentTypeHeader) ?? '').toLowerCase();
+      if (contentType.contains('text/html') || contentType.contains('application/json')) {
+        throw Exception('The link returned a webpage or error response, not a media file.');
+      }
+      if (expectAudio &&
+          contentType.isNotEmpty &&
+          !contentType.startsWith('audio/') &&
+          !contentType.contains('octet-stream') &&
+          !contentType.contains('application/mp4') &&
+          !contentType.contains('video/mp4')) {
+        throw Exception('The server did not return a recognized audio file.');
       }
 
-      final actualExtension = p.extension(fileName).toLowerCase();
-      if (expectedAudio || _audioExtensions.contains(actualExtension)) {
-        status.value = 'Saving to My Audios…';
+      if (expectAudio || _audioExtensions.contains(p.extension(fileName).toLowerCase())) {
+        status.value = 'Adding to My Audios…';
         if (!mounted) return;
 
+        // saveTrack must copy the source file to persistent app storage before
+        // this temporary file is removed in finally.
         await context.read<AudioLibraryCubit>().saveTrack(
-          sourcePath: tempPath,
-          title: p.basenameWithoutExtension(fileName),
-        );
-        if (!mounted) return;
+              sourcePath: tempPath,
+              title: p.basenameWithoutExtension(fileName),
+            );
         await context.read<AudioLibraryCubit>().loadTracks();
-        closeProgressDialog();
-        _showMessage('Audio saved to My Audios!');
+        closeDialog();
+        _message('Audio saved to My Audios.');
       } else {
-        final downloadsDir = Directory(p.join((await getApplicationDocumentsDirectory()).path, 'Downloads'));
-        await downloadsDir.create(recursive: true);
-        final destination = p.join(downloadsDir.path, fileName);
-        final uniqueDestination = await File(destination).exists()
-            ? p.join(downloadsDir.path, '${DateTime.now().millisecondsSinceEpoch}_$fileName')
-            : destination;
-        await file.rename(uniqueDestination);
-        tempPath = uniqueDestination;
-        preserveDownloadedFile = true;
-        closeProgressDialog();
-        _showMessage('File saved inside Mazzica: Downloads/$fileName');
+        final documents = await getApplicationDocumentsDirectory();
+        final downloadsDirectory = Directory(p.join(documents.path, 'Downloads'));
+        await downloadsDirectory.create(recursive: true);
+
+        var destination = p.join(downloadsDirectory.path, fileName);
+        if (await File(destination).exists()) {
+          destination = p.join(
+            downloadsDirectory.path,
+            '${DateTime.now().millisecondsSinceEpoch}_$fileName',
+          );
+        }
+        final savedFile = await downloaded.rename(destination);
+        finalPath = savedFile.path;
+        keepFile = true;
+        closeDialog();
+        _message('File saved inside Mazzica → Downloads.');
       }
-    } on DioException catch (e) {
-      closeProgressDialog();
-      if (CancelToken.isCancel(e)) {
-        if (mounted) _showMessage('Download cancelled.');
+    } on DioException catch (error) {
+      closeDialog();
+      if (CancelToken.isCancel(error)) {
+        if (mounted) _message('Download cancelled.');
       } else {
-        debugPrint('Download failed: ${e.message}');
-        if (mounted) _showMessage('Download failed. The link may require login or block downloads.');
+        debugPrint('Mazzica download error: ${error.message}');
+        if (mounted) {
+          _message('Download failed. This link may require login or block direct downloads.');
+        }
       }
-    } catch (e) {
-      closeProgressDialog();
-      debugPrint('Download failed: $e');
-      if (mounted) _showMessage('Download failed: ${e.toString()}');
+    } catch (error, stackTrace) {
+      closeDialog();
+      debugPrint('Mazzica download error: $error\n$stackTrace');
+      if (mounted) _message('Could not save this file. Check that the link is a real download.');
     } finally {
-      closeProgressDialog();
-      if (tempPath != null && !preserveDownloadedFile) {
+      closeDialog();
+      if (!keepFile && tempPath != null) {
         try {
           final file = File(tempPath);
           if (await file.exists()) await file.delete();
-        } catch (e) {
-          debugPrint('Temporary file cleanup failed: $e');
+        } catch (error) {
+          debugPrint('Temporary download cleanup error: $error');
         }
       }
       progress.dispose();
       status.dispose();
+      if (identical(_activeDownload, cancelToken)) _activeDownload = null;
       if (mounted) setState(() => _isDownloading = false);
+      // finalPath is intentionally retained for non-audio downloads.
+      debugPrint('Saved file path: ${finalPath ?? '(audio library)'}');
     }
+  }
+
+  Future<bool> _handlePopup(CreateWindowAction action) async {
+    // Sites often use target="_blank". Load ordinary web links in this same
+    // WebView instead of opening another app/window.
+    final target = action.request.url;
+    if (_isWebUri(target)) {
+      await _webController?.loadUrl(urlRequest: URLRequest(url: target));
+      return true;
+    }
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
-    final bottomInset = 74.h + 68.h + bottomPadding + 10.h;
+    final safeBottom = MediaQuery.of(context).viewPadding.bottom;
+    final reservedBottom = 74.h + 68.h + safeBottom + 10.h;
 
     return CupertinoPageScaffold(
       backgroundColor: AppColors.bg,
@@ -354,39 +440,59 @@ class _ExploreScreenState extends State<ExploreScreen> {
         bottom: false,
         child: Column(
           children: [
-            _buildTopBar(),
-            if (_pageProgress < 1.0)
-              LinearProgressIndicator(
-                value: _pageProgress,
-                backgroundColor: AppColors.surface,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
-                minHeight: 2.h,
-              ),
+            _buildBrowserBar(),
+            SizedBox(
+              height: 2.h,
+              child: _isPageLoading || _pageProgress < 1
+                  ? LinearProgressIndicator(
+                      value: _pageProgress > 0 ? _pageProgress : null,
+                      backgroundColor: AppColors.surface,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.lime),
+                    )
+                  : const SizedBox.shrink(),
+            ),
             Expanded(
               child: Padding(
-                padding: EdgeInsets.only(bottom: bottomInset),
+                padding: EdgeInsets.only(bottom: reservedBottom),
                 child: InAppWebView(
-                  initialUrlRequest: URLRequest(url: WebUri(_initialUrl)),
-                  initialSettings: _settings,
-                  onWebViewCreated: (controller) => _webViewController = controller,
-                  onLoadStart: (controller, url) => _updateNavState(url),
-                  onLoadStop: (controller, url) => _updateNavState(url),
+                  initialUrlRequest: URLRequest(url: WebUri(_homeUrl)),
+                  initialSettings: _webSettings,
+                  onWebViewCreated: (controller) => _webController = controller,
+                  onLoadStart: (controller, url) {
+                    if (!mounted) return;
+                    setState(() {
+                      _isPageLoading = true;
+                      _pageProgress = 0;
+                    });
+                    _refreshNavigationState(url);
+                  },
+                  onLoadStop: (controller, url) {
+                    if (!mounted) return;
+                    setState(() {
+                      _isPageLoading = false;
+                      _pageProgress = 1;
+                    });
+                    _refreshNavigationState(url);
+                  },
                   onUpdateVisitedHistory: (controller, url, isReload) {
-                    if (url != null) _updateNavState(url);
+                    _refreshNavigationState(url);
                   },
                   onProgressChanged: (controller, progress) {
-                    if (mounted) setState(() => _pageProgress = progress / 100);
+                    if (!mounted) return;
+                    setState(() {
+                      _pageProgress = progress / 100;
+                      _isPageLoading = progress < 100;
+                    });
                   },
                   onDownloadStartRequest: (controller, request) {
                     _handleWebViewDownload(request);
                   },
+                  onCreateWindow: (controller, action) => _handlePopup(action),
                   shouldOverrideUrlLoading: (controller, navigationAction) async {
                     final uri = navigationAction.request.url;
-                    if (uri == null) return NavigationActionPolicy.CANCEL;
-                    final scheme = uri.scheme.toLowerCase();
-                    if (scheme != 'http' && scheme != 'https') {
-                      return NavigationActionPolicy.CANCEL;
-                    }
+                    // Keep web pages inside Mazzica; reject tel:, intent:, youtube:
+                    // and other schemes that may open external applications.
+                    if (!_isWebUri(uri)) return NavigationActionPolicy.CANCEL;
                     return NavigationActionPolicy.ALLOW;
                   },
                 ),
@@ -398,84 +504,118 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildBrowserBar() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
+      padding: EdgeInsets.fromLTRB(7.w, 8.h, 7.w, 8.h),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(
           bottom: BorderSide(
-            color: AppColors.textSecondary.withValues(alpha: 0.1),
+            color: AppColors.textSecondary.withValues(alpha: 0.12),
             width: 0.5,
           ),
         ),
       ),
       child: Row(
         children: [
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: _canGoBack ? () => _webViewController?.goBack() : null,
-            child: Icon(
-              CupertinoIcons.back,
-              color: _canGoBack ? AppColors.lime : AppColors.textSecondary.withValues(alpha: 0.3),
-              size: 22.sp,
-            ),
+          _BrowserIconButton(
+            icon: CupertinoIcons.back,
+            enabled: _canGoBack,
+            onPressed: () => _webController?.goBack(),
+            tooltip: 'Back',
           ),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: _canGoForward ? () => _webViewController?.goForward() : null,
-            child: Icon(
-              CupertinoIcons.forward,
-              color: _canGoForward ? AppColors.lime : AppColors.textSecondary.withValues(alpha: 0.3),
-              size: 22.sp,
-            ),
+          _BrowserIconButton(
+            icon: CupertinoIcons.forward,
+            enabled: _canGoForward,
+            onPressed: () => _webController?.goForward(),
+            tooltip: 'Forward',
           ),
           SizedBox(width: 4.w),
           Expanded(
             child: Container(
-              height: 36.h,
+              height: 39.h,
               decoration: BoxDecoration(
                 color: AppColors.bg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.textSecondary.withValues(alpha: 0.2)),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(
+                  color: AppColors.textSecondary.withValues(alpha: 0.18),
+                ),
               ),
               child: CupertinoTextField(
-                controller: _urlController,
-                placeholder: 'Search or type URL…',
+                controller: _addressController,
+                placeholder: 'Search Google or enter URL',
                 placeholderStyle: TextStyle(
-                  color: AppColors.textSecondary.withValues(alpha: 0.5),
-                  fontSize: 13.sp,
+                  color: AppColors.textSecondary.withValues(alpha: 0.65),
+                  fontSize: 11.sp,
                 ),
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 13.sp),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 11.sp),
                 cursorColor: AppColors.lime,
-                padding: EdgeInsets.symmetric(horizontal: 10.w),
-                decoration: const BoxDecoration(color: Colors.transparent),
+                padding: EdgeInsets.symmetric(horizontal: 9.w),
                 textInputAction: TextInputAction.go,
-                onSubmitted: _loadUrl,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const BoxDecoration(color: Colors.transparent),
                 prefix: Padding(
                   padding: EdgeInsets.only(left: 8.w),
-                  child: Icon(CupertinoIcons.globe, color: AppColors.lime.withValues(alpha: 0.7), size: 16.sp),
+                  child: Icon(
+                    CupertinoIcons.globe,
+                    color: AppColors.lime,
+                    size: 15.sp,
+                  ),
                 ),
+                onSubmitted: _navigate,
               ),
             ),
           ),
-          CupertinoButton(
-            padding: EdgeInsets.symmetric(horizontal: 7.w),
-            onPressed: _isDownloading ? null : _downloadCurrentPage,
-            child: _isDownloading
-                ? SizedBox(
-                    width: 20.sp,
-                    height: 20.sp,
-                    child: const CupertinoActivityIndicator(color: AppColors.lime),
-                  )
-                : Icon(CupertinoIcons.cloud_download, color: AppColors.lime, size: 22.sp),
+          SizedBox(width: 3.w),
+          _BrowserIconButton(
+            icon: CupertinoIcons.cloud_download,
+            enabled: !_isDownloading,
+            highlighted: true,
+            onPressed: _downloadButtonPressed,
+            tooltip: _isDownloading ? 'Download in progress' : 'Download direct audio',
           ),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => _webViewController?.reload(),
-            child: Icon(CupertinoIcons.refresh, color: AppColors.textSecondary, size: 18.sp),
+          _BrowserIconButton(
+            icon: CupertinoIcons.refresh,
+            enabled: true,
+            onPressed: () => _webController?.reload(),
+            tooltip: 'Reload',
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _BrowserIconButton extends StatelessWidget {
+  const _BrowserIconButton({
+    required this.icon,
+    required this.enabled,
+    required this.onPressed,
+    required this.tooltip,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onPressed;
+  final String tooltip;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = enabled
+        ? (highlighted ? AppColors.lime : AppColors.textSecondary)
+        : AppColors.textSecondary.withValues(alpha: 0.3);
+
+    return Tooltip(
+      message: tooltip,
+      child: CupertinoButton(
+        minSize: 34,
+        padding: EdgeInsets.symmetric(horizontal: 4.w),
+        onPressed: enabled ? onPressed : null,
+        child: Icon(icon, size: highlighted ? 21.sp : 20.sp, color: color),
       ),
     );
   }
