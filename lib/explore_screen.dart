@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -30,9 +31,64 @@ class ExploreScreen extends StatefulWidget {
 
 class _ExploreScreenState extends State<ExploreScreen> {
   static const String _homeUrl = 'https://www.google.com';
+  static const String _startPageBase = 'https://mazzica.local/start';
+  static const String _homeDisplay = 'mazzica://start';
+
   static const Set<String> _audioExtensions = {
     '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.flac', '.aiff', '.aif',
   };
+
+  /// Bundled start page: a hand-picked list of legal, free-music sources
+  /// that offer direct downloads. Dark-themed to match the app.
+  static const String _startPageHtml = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mazzica — Free Music Sources</title>
+<style>
+  body { margin:0; padding:24px 18px 60px; background:#0E0F12;
+         color:#F5F5F0; font-family:-apple-system, system-ui, sans-serif; }
+  h1 { font-size:22px; margin:0 0 4px; color:#C6FF3D; }
+  p.sub { color:#8A8A8F; font-size:13px; margin:0 0 24px; line-height:1.5; }
+  a.card { display:block; background:#1A1B20; border:1px solid #26272e;
+         border-radius:14px; padding:16px; margin-bottom:12px;
+         text-decoration:none; color:#F5F5F0; }
+  a.card b { color:#C6FF3D; font-size:15px; }
+  a.card span { display:block; color:#8A8A8F; font-size:12px; margin-top:4px; }
+  .note { margin-top:28px; font-size:11px; color:#5c5c63; line-height:1.6; }
+</style>
+</head>
+<body>
+  <h1>Free &amp; Legal Music</h1>
+  <p class="sub">Tap a source, find a track, and use the download button
+  in the Mazzica toolbar when the site offers a direct file.</p>
+
+  <a class="card" href="https://www.jamendo.com/start"><b>Jamendo</b>
+    <span>Independent artists sharing music under Creative Commons.</span></a>
+
+  <a class="card" href="https://freemusicarchive.org"><b>Free Music Archive</b>
+    <span>Curated library of free-to-download tracks.</span></a>
+
+  <a class="card" href="https://archive.org/details/audio"><b>Internet Archive — Audio</b>
+    <span>Live music, podcasts, and public-domain recordings.</span></a>
+
+  <a class="card" href="https://musopen.org/music/"><b>Musopen</b>
+    <span>Classical music, sheet music, and public-domain recordings.</span></a>
+
+  <a class="card" href="https://pixabay.com/music/"><b>Pixabay Music</b>
+    <span>Free tracks for videos and personal listening.</span></a>
+
+  <a class="card" href="https://uppbeat.io"><b>Uppbeat</b>
+    <span>Free music for creators, with direct downloads.</span></a>
+
+  <div class="note">Mazzica only downloads files that a website offers
+  directly. It does not download from YouTube or bypass any site's
+  restrictions. Always respect each source's license.</div>
+</body>
+</html>
+''';
 
   final TextEditingController _addressController = TextEditingController();
   final Dio _dio = Dio();
@@ -47,26 +103,43 @@ class _ExploreScreenState extends State<ExploreScreen> {
   bool _isPageLoading = true;
 
   late final InAppWebViewSettings _webSettings;
+  late final UserScript _stripAppBannerScript;
 
   @override
   void initState() {
     super.initState();
-    _addressController.text = _homeUrl;
+    _addressController.text = _homeDisplay;
+
+    // Remove the Smart App Banner meta tag (e.g. YouTube's "Open App")
+    // before any page renders, so taps can never be handed off to an
+    // external app by the system.
+    _stripAppBannerScript = UserScript(
+      source: '''
+        (function() {
+          var remove = function() {
+            var meta = document.querySelector('meta[name="apple-itunes-app"]');
+            if (meta) meta.remove();
+          };
+          remove();
+          document.addEventListener('DOMContentLoaded', remove);
+        })();
+      ''',
+      injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+    );
+
     _webSettings = InAppWebViewSettings(
       javaScriptEnabled: true,
-      // Prevent pages from automatically spawning windows that may be
-      // handed off to another app. Keep navigation inside this WebView.
-      javaScriptCanOpenWindowsAutomatically: false,
-      supportMultipleWindows: false,
+      javaScriptCanOpenWindowsAutomatically: true,
+      supportMultipleWindows: true,
       useShouldOverrideUrlLoading: true,
+      // Required so onDownloadStartRequest fires (especially on iOS).
+      useOnDownloadStart: true,
       allowsInlineMediaPlayback: true,
       mediaPlaybackRequiresUserGesture: true,
       supportZoom: true,
       transparentBackground: true,
       useHybridComposition: true,
       isInspectable: kDebugMode,
-      // Never hand a website's custom app/deep-link scheme to another app.
-      // HTTP and HTTPS navigation is handled by shouldOverrideUrlLoading.
     );
   }
 
@@ -98,6 +171,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final input = raw.trim();
     if (input.isEmpty) return null;
 
+    if (input == _homeDisplay) return Uri.parse(_startPageBase);
+
     final parsed = Uri.tryParse(input);
     if (parsed != null &&
         (parsed.scheme.toLowerCase() == 'http' ||
@@ -117,6 +192,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return Uri.https('www.google.com', '/search', {'q': input});
   }
 
+  Future<void> _loadStartPage() async {
+    await _webController?.loadData(
+      data: _startPageHtml,
+      baseUrl: WebUri(_startPageBase),
+    );
+  }
+
   Future<void> _navigate(String raw) async {
     final uri = _resolveAddress(raw);
     if (uri == null) {
@@ -124,6 +206,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
       return;
     }
     FocusManager.instance.primaryFocus?.unfocus();
+    if (uri.toString() == _startPageBase) {
+      await _loadStartPage();
+      return;
+    }
     await _webController?.loadUrl(urlRequest: URLRequest(url: WebUri(uri.toString())));
   }
 
@@ -137,7 +223,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
       setState(() {
         _canGoBack = back;
         _canGoForward = forward;
-        if (currentUrl != null) _addressController.text = currentUrl.toString();
+        if (currentUrl != null) {
+          _addressController.text = currentUrl.toString() == _startPageBase
+              ? _homeDisplay
+              : currentUrl.toString();
+        }
       });
     } catch (error) {
       debugPrint('Browser navigation state error: $error');
@@ -157,7 +247,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     var name = p.basename(candidate.trim());
     name = name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_');
     if (name.isEmpty || name == '.' || name == '..') name = fallback;
-    // Avoid accidental hidden files and excessively long names.
     if (name.startsWith('.')) name = 'download_$name';
     if (name.length > 140) {
       final extension = p.extension(name);
@@ -165,6 +254,30 @@ class _ExploreScreenState extends State<ExploreScreen> {
       name = '${base.substring(0, base.length.clamp(0, 120).toInt())}$extension';
     }
     return name;
+  }
+
+  /// Map a response Content-Type to a file extension when the URL has none.
+  String? _extensionFromContentType(String contentType) {
+    const map = {
+      'audio/mpeg': '.mp3',
+      'audio/mp3': '.mp3',
+      'audio/mp4': '.m4a',
+      'audio/x-m4a': '.m4a',
+      'audio/aac': '.aac',
+      'audio/wav': '.wav',
+      'audio/x-wav': '.wav',
+      'audio/wave': '.wav',
+      'audio/ogg': '.ogg',
+      'audio/opus': '.opus',
+      'audio/flac': '.flac',
+      'audio/x-flac': '.flac',
+      'audio/aiff': '.aiff',
+      'audio/x-aiff': '.aiff',
+      'video/mp4': '.mp4',
+      'application/mp4': '.m4a',
+      'audio/webm': '.webm',
+    };
+    return map[contentType];
   }
 
   Future<void> _handleWebViewDownload(DownloadStartRequest request) async {
@@ -209,20 +322,16 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
     final uri = Uri.parse(current!.toString());
     final extension = p.extension(uri.path).toLowerCase();
-    if (!_audioExtensions.contains(extension)) {
-      _message(
-        'This page is not a direct audio file. Use a website-provided download link for audio you are allowed to save.',
-      );
-      return;
-    }
 
+    // ✅ No audio extension? Try anyway and validate Content-Type
+    // afterwards — many sites serve files from extension-less URLs.
     await _downloadFile(
       uri,
       _cleanFileName(
         p.basename(uri.path),
-        fallback: 'audio_${DateTime.now().millisecondsSinceEpoch}$extension',
+        fallback: 'download_${DateTime.now().millisecondsSinceEpoch}${extension.isNotEmpty ? extension : '.bin'}',
       ),
-      expectAudio: true,
+      expectAudio: _audioExtensions.contains(extension),
     );
   }
 
@@ -256,8 +365,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     try {
-      // A dedicated progress dialog keeps the browser responsive and lets the
-      // user cancel a slow or stalled request.
       showCupertinoDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -338,34 +445,45 @@ class _ExploreScreenState extends State<ExploreScreen> {
         throw Exception('The server returned HTTP $statusCode.');
       }
 
-      final downloaded = File(tempPath);
+      var downloaded = File(tempPath);
       if (!await downloaded.exists() || await downloaded.length() == 0) {
         throw Exception('The server returned an empty file.');
       }
 
-      final contentType =
+      final rawContentType =
           (response.headers.value(Headers.contentTypeHeader) ?? '').toLowerCase();
+      final contentType = rawContentType.split(';').first.trim();
+
       if (contentType.contains('text/html') || contentType.contains('application/json')) {
         throw Exception('The link returned a webpage or error response, not a media file.');
       }
-      if (expectAudio &&
-          contentType.isNotEmpty &&
-          !contentType.startsWith('audio/') &&
-          !contentType.contains('octet-stream') &&
-          !contentType.contains('application/mp4') &&
-          !contentType.contains('video/mp4')) {
-        throw Exception('The server did not return a recognized audio file.');
+
+      // ✅ Sniff the real content: extension-less URLs may still be audio.
+      final isAudioContent = contentType.startsWith('audio/') ||
+          contentType == 'application/mp4' ||
+          contentType == 'video/mp4' ||
+          contentType == 'application/octet-stream' && expectAudio;
+
+      // Fix the extension when the URL didn't have one.
+      var effectiveFileName = fileName;
+      if (p.extension(effectiveFileName).isEmpty) {
+        final sniffed = _extensionFromContentType(contentType);
+        if (sniffed != null) {
+          effectiveFileName = '$effectiveFileName$sniffed';
+          final renamed = File('${p.withoutExtension(tempPath)}$sniffed');
+          await downloaded.rename(renamed.path);
+          downloaded = renamed;
+          tempPath = renamed.path;
+        }
       }
 
-      if (expectAudio || _audioExtensions.contains(p.extension(fileName).toLowerCase())) {
+      if (expectAudio || isAudioContent) {
         status.value = 'Adding to My Audios…';
         if (!mounted) return;
 
-        // saveTrack must copy the source file to persistent app storage before
-        // this temporary file is removed in finally.
         await context.read<AudioLibraryCubit>().saveTrack(
               sourcePath: tempPath,
-              title: p.basenameWithoutExtension(fileName),
+              title: p.basenameWithoutExtension(effectiveFileName),
             );
         await context.read<AudioLibraryCubit>().loadTracks();
         closeDialog();
@@ -375,11 +493,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
         final downloadsDirectory = Directory(p.join(documents.path, 'Downloads'));
         await downloadsDirectory.create(recursive: true);
 
-        var destination = p.join(downloadsDirectory.path, fileName);
+        var destination = p.join(downloadsDirectory.path, effectiveFileName);
         if (await File(destination).exists()) {
           destination = p.join(
             downloadsDirectory.path,
-            '${DateTime.now().millisecondsSinceEpoch}_$fileName',
+            '${DateTime.now().millisecondsSinceEpoch}_$effectiveFileName',
           );
         }
         final savedFile = await downloaded.rename(destination);
@@ -416,7 +534,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
       status.dispose();
       if (identical(_activeDownload, cancelToken)) _activeDownload = null;
       if (mounted) setState(() => _isDownloading = false);
-      // finalPath is intentionally retained for non-audio downloads.
       debugPrint('Saved file path: ${finalPath ?? '(audio library)'}');
     }
   }
@@ -428,8 +545,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     if (_isWebUri(target)) {
       await _webController?.loadUrl(urlRequest: URLRequest(url: target));
     }
-    // Return true even for unsupported/custom schemes so the popup is handled
-    // here instead of being delegated to YouTube or another installed app.
     return true;
   }
 
@@ -459,8 +574,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
               child: Padding(
                 padding: EdgeInsets.only(bottom: reservedBottom),
                 child: InAppWebView(
-                  initialUrlRequest: URLRequest(url: WebUri(_homeUrl)),
+                  // ✅ Local start page instead of an external search engine.
+                  initialData: InAppWebViewInitialData(
+                    data: _startPageHtml,
+                    baseUrl: WebUri(_startPageBase),
+                  ),
                   initialSettings: _webSettings,
+                  initialUserScripts: UnmodifiableListView<UserScript>(
+                    [_stripAppBannerScript],
+                  ),
                   onWebViewCreated: (controller) => _webController = controller,
                   onLoadStart: (controller, url) {
                     if (!mounted) return;
@@ -494,8 +616,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   onCreateWindow: (controller, action) => _handlePopup(action),
                   shouldOverrideUrlLoading: (controller, navigationAction) async {
                     final uri = navigationAction.request.url;
-                    // Keep web pages inside Mazzica; reject tel:, intent:, youtube:
-                    // and other schemes that may open external applications.
+                    // Keep web pages inside Mazzica; reject tel:, intent:,
+                    // youtube:, and any other external scheme.
                     if (!_isWebUri(uri)) return NavigationActionPolicy.CANCEL;
                     return NavigationActionPolicy.ALLOW;
                   },
