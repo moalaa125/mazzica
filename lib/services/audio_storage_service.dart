@@ -26,23 +26,30 @@ class AudioStorageService {
   /// A unique stored filename is always generated. This prevents two
   /// different source files with the same basename from sharing one file.
   Future<String> copyToAppDir(String sourcePath) async {
-    if (sourcePath.trim().isEmpty) {
+    var cleanPath = sourcePath.trim();
+    if (cleanPath.startsWith('file://')) {
+      cleanPath = Uri.decodeFull(Uri.parse(cleanPath).toFilePath());
+    } else {
+      cleanPath = Uri.decodeFull(cleanPath);
+    }
+
+    if (cleanPath.isEmpty) {
       throw const FileSystemException('The selected file path is empty.');
     }
 
-    if (sourcePath.startsWith('content://')) {
+    if (cleanPath.startsWith('content://')) {
       throw const FileSystemException(
         'The selected file is exposed as a content URI and cannot be '
         'copied from a filesystem path. FilePicker must provide a local path.',
       );
     }
 
-    final source = File(sourcePath);
+    final source = File(cleanPath);
 
     if (!await source.exists()) {
       throw FileSystemException(
         'The selected audio file no longer exists.',
-        sourcePath,
+        cleanPath,
       );
     }
 
@@ -50,12 +57,12 @@ class AudioStorageService {
     if (sourceLength <= 0) {
       throw FileSystemException(
         'The selected audio file is empty.',
-        sourcePath,
+        cleanPath,
       );
     }
 
     final dir = await _audioDir;
-    final originalName = p.basename(sourcePath);
+    final originalName = p.basename(cleanPath);
     final extension = p.extension(originalName);
     final baseName = p.basenameWithoutExtension(originalName)
         .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
@@ -88,6 +95,31 @@ class AudioStorageService {
     }
 
     return fileName;
+  }
+
+  /// استقبال الملف القادم من المشاركة (Share Intent)، حشوه في الذاكرة الدائمة،
+  /// وإنشاء كائن AudioTrack وحفظه تلقائياً في SharedPreferences.
+  Future<AudioTrack> processAndSaveSharedTrack(String sharedFilePath) async {
+    // 1. نسَخ الملف لمجلد audios الدائم باستخدام دالتك
+    final storedFileName = await copyToAppDir(sharedFilePath);
+
+    // 2. استخراج عنوان اسم الملف بشكل نظيف
+    final originalName = p.basename(sharedFilePath);
+    final rawTitle = p.basenameWithoutExtension(originalName).trim();
+    final cleanTitle = rawTitle.isEmpty ? 'Shared Track' : rawTitle;
+
+    // 3. إنشاء كائن AudioTrack
+    final track = AudioTrack(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: cleanTitle,
+      fileName: storedFileName,
+      addedAt: DateTime.now(),
+    );
+
+    // 4. حفظ Track في قائمة SharedPreferences
+    await saveTrack(track);
+
+    return track;
   }
 
   Future<String> getFilePath(String fileName) async {
@@ -166,7 +198,7 @@ class AudioStorageService {
 
   Future<void> saveLastPlayedTrackId(String trackId) async {
     if (trackId.trim().isEmpty) {
-      throw  ArgumentError('Track ID cannot be empty.');
+      throw ArgumentError('Track ID cannot be empty.');
     }
 
     final prefs = await SharedPreferences.getInstance();
@@ -194,7 +226,6 @@ class AudioStorageService {
       }
     }
 
-    // Never silently substitute another song for the requested last song.
     await prefs.remove(_lastTrackKey);
     return null;
   }

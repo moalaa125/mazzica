@@ -13,6 +13,16 @@ class AudioLibraryCubit extends Cubit<AudioLibraryState> {
     loadTracks();
   }
 
+ Future<AudioTrack> addSharedTrack(String sharedFilePath) async {
+  // 1. معالجة وحفظ الملف عبر _storageService المحقون مسبقاً
+  final newTrack = await _storageService.processAndSaveSharedTrack(sharedFilePath);
+
+  // 2. إعادة تحميل القائمة وتحديث الـ State تلقائياً بالكامل
+  await loadTracks();
+
+  return newTrack;
+}
+
   Future<void> loadTracks() async {
     final generation = ++_loadGeneration;
 
@@ -102,4 +112,11 @@ class AudioLibraryCubit extends Cubit<AudioLibraryState> {
   Future<String> getFilePath(String fileName) {
     return _storageService.getFilePath(fileName);
   }
+
+
+
+
+  
+
+  
 }
